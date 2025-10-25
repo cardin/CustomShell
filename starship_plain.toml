@@ -1,0 +1,80 @@
+# Purpose: For Servers
+# - Because if logged in through a physical terminal, it does not have Unicode and NerdFonts
+# - Because if shared with other users, they might not have Unicode and NerdFonts
+#
+# To install:
+# wget https://raw.githubusercontent.com/cardin/starship/refs/heads/mod/docs/public/presets/toml/plain-text-symbols.toml -O $STARSHIP_CONFIG
+
+format = """
+$username\
+$hostname\
+$directory\
+$git_branch\
+$git_commit\
+$git_status\
+$java\
+$nodejs\
+$python\
+$conda\
+$container\
+$docker_context\
+$helm\
+$jobs\
+$time\
+$cmd_duration\
+$memory_usage\
+$line_break$character"""
+
+continuation_prompt = "[.](bright-black) "
+
+[hostname]
+    ssh_symbol = ""
+
+[character]
+    success_symbol = "[>](bold green)"
+    error_symbol = "[x](bold red)"
+    vimcmd_symbol = "[<](bold green)"
+    vimcmd_visual_symbol = "[<](bold yellow)"
+    vimcmd_replace_symbol = "[<](bold purple)"
+    vimcmd_replace_one_symbol = "[<](bold purple)"
+
+[git_commit]
+    format = "[($tag)]($style) "
+    tag_symbol = " tag "
+    tag_disabled = false
+
+[git_status]
+    ahead = ">"
+    behind = "<"
+    diverged = "<>"
+    renamed = "r"
+    deleted = "x"
+
+[conda]
+    symbol = "conda "
+
+[directory]
+    read_only = " ro"
+
+[git_branch]
+    symbol = "git "
+
+[java]
+    symbol = "java "
+
+[nodejs]
+    symbol = "nodejs "
+
+[memory_usage]
+    symbol = "memory "
+    disabled = false
+
+[python]
+    symbol = "py "
+
+[status]
+    symbol = "[x](bold red) "
+
+[time]
+    disabled = false
+    time_format = "%R"
