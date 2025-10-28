@@ -29,18 +29,20 @@ checkInstalled() {
 helpMe() {
     echo -e "$Blue" "󰗉󰗉󰗉  helpMe()  󰗉󰗉󰗉"
     echo -e "$Purple" \
-"•  wcd ~; wpushd; cmd; dos2unix; release-ram
+"•  wcd ~ 󰇙 wpushd 󰇙 cmd 󰇙 dos2unix 󰇙 release-ram 󰇙 \$USERPROFILE
 • list_cert_chain
-• lazydocker; lazygit
-• conda; pipx; uv; node
-• z[i]; bat; tree [-L]; [un]tar_gpg
-• btop; progress [-w -m]
-• df -hl ...; du -hl [--max-depth <int>] ...
-• rg <regex> [--glob <str>] [--type <py>] [--no-ignore] [--hidden] [-B|A|C <int>] [-l] [<path> ...]
-• fd <regex> [--glob <str>] [-e <py>] [--type d|f] [--no-ignore] [--hidden] [<dir>] [--full-path] [--exec <cmd> {} /;]
+• lazydocker 󰇙 lazygit
+• conda 󰇙 pipx 󰇙 uv 󰇙 node
+• z[i] 󰇙 bat 󰇙 tree [-L] 󰇙 [un]tar_gpg
+• btop 󰇙 progress [-w -m]
+• df -hl .. 󰇙 du -hl [--max-depth <int>] ..
+• rg <regex> [--glob ..] [--type <py>] [--no-ignore] [--hidden] [--max-depth ..] \
+    [-l] [-B|A|C <int>] [<path> ...]
+• fd <regex> [--glob ..] [--type d|f] [--no-ignore] [--hidden] [--max|min-depth ..] \
+    [--full-path] [-e <py>] [<targetDir>] [--exec <cmd> {} /;]
 • xargs -I % [-0] echo \"%\"
-• ssh [-p <port>] [-N] [-L <localPort>:localhost:<remotePort>] [-J <user>@<hop1>] <user>@<remoteServer>
-• \$USERPROFILE; \$USER"
+• ssh [-p <port>] [-NT] [-L [<local>:]<port>:<remote>:<port>] [-J <user>@<hop1>] <user>@<hop2>
+• \$USER"
 }
 
 # For Tmux

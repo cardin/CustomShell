@@ -8,7 +8,7 @@ Write-Debug "[Tools] Elapsed time: $($elapsed_tools.TotalSeconds) seconds"
 
 function existCheck {
     # Iterate through an array of command names, checking if the command exists
-    $commandNames = "bat", "conda", "delta", "fd", "fnm", "less", "node", "nvitop", "rg", "vim", "uv", "zoxide"
+    $commandNames = "bat", "conda", "delta", "fd", "less", "node", "nvitop", "rg", "vim", "uv", "zoxide"
     $missing = $false
     foreach ($name in $commandNames) {
         if (!(Get-Command $name -ErrorAction SilentlyContinue)) {
@@ -26,10 +26,13 @@ function helpMe {
     Write-Host -ForegroundColor Blue '󰗉󰗉󰗉  helpMe  󰗉󰗉󰗉'
     Write-Host -ForegroundColor DarkCyan @'
 • helpMe
-• conda, fnm, z[i], bat[diff], nvitop, vim
-• rg <regex> [--glob <str>] [--type <py>] [--no-ignore] [-B|A|C <int>] [-l] [<path> ...]
-• fd <regex> [--glob <str>] [-e <py>] [--type d|f] [--no-ignore] [--hidden] [<dir>] [--full-path] [--exec <cmd> {} /;]
-• ssh [-p <port>] [-N] [-L <localPort>:localhost:<remotePort>] [-J <user>@<hop1>] <user>@<remoteServer>
+• conda 󰇙 pipx 󰇙 uv 󰇙 node
+• z[i] 󰇙 bat[diff] 󰇙 nvitop 󰇙 vim
+• rg <regex> [--glob ..] [--type <py>] [--no-ignore] [--hidden] [--max-depth ..] 
+    [-l] [-B|A|C <int>] [<path> ...]
+• fd <regex> [--glob ..] [--type d|f] [--no-ignore] [--hidden] [--max|min-depth ..] 
+    [--full-path] [-e <py>] [<targetDir>] [--exec <cmd> {} /;]
+• ssh [-p <port>] [-NT] [-L [<local>:]<port>:<remote>:<port>] [-J <user>@<hop1>] <user>@<hop2>
 • $env:USERPROFILE
 
 '@
