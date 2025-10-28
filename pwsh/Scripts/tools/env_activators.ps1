@@ -10,6 +10,18 @@ If ($env:CONDA_PATH -and (Test-Path "$env:CONDA_PATH\conda.exe")) {
     function conda { _lazyLoadConda $args }
 }
 
+# ====== FNM ======
+if (Get-Command fnm -ErrorAction SilentlyContinue) {
+    function _lazyLoadFnm {
+        param($zArgs)
+        Remove-Item Function:\fnm -ErrorAction SilentlyContinue
+        Invoke-Expression (& { (fnm env --shell powershell | Out-String) })
+        
+        & fnm @zArgs
+    }
+    function fnm { _lazyLoadFnm $args }
+}
+
 # ====== ZOXIDE ======
 if (Get-Command zoxide -ErrorAction SilentlyContinue) {
     function _lazyLoadZoxide {

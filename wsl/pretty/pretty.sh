@@ -8,9 +8,14 @@ source "$PRETTY_SCRIPT_DIR/etc_inputrc.sh"
 # Check what's installed
 checkInstalled() {
     local missing=false
+
     local -r programs=("bat" "btop" "conda" "delta" "dos2unix" "fd" "fzf"
-        "lazygit" "lazydocker" "node" "nvitop" "pipx" "progress"
+        "node" "nvitop" "pipx" "progress"
         "rg" "tmux" "tree" "unzip" "uv" "zip" "zoxide")
+
+    if [ "$IS_WSL" = false ]; then
+        programs+=("lazygit" "lazydocker")
+    fi
 
     for program in "${programs[@]}"; do
         local pattern="${program} is /mnt/"
@@ -26,19 +31,25 @@ checkInstalled() {
     fi
 }
 
-helpMe() {
-    echo -e "$Blue" "󰗉󰗉󰗉  helpMe()  󰗉󰗉󰗉"
-    echo -e "$Purple" \
-"•  wcd ~ 󰇙 wpushd 󰇙 cmd 󰇙 dos2unix 󰇙 release-ram 󰇙 \$USERPROFILE
+manShell () {
+    echo -e "$Blue󰗉󰗉󰗉  manShell ()  󰗉󰗉󰗉"
+
+    if [ "$IS_WSL" = true ]; then
+        echo -e "$Green\
+•  wcd ~ 󰇙 wpushd 󰇙 cmd 󰇙 dos2unix 󰇙 release-ram 󰇙 \$USERPROFILE"
+    else
+        echo -e "$Green\
+• lazydocker 󰇙 lazygit"
+    fi
+    echo -e "$Green\
 • list_cert_chain
-• lazydocker 󰇙 lazygit
 • conda 󰇙 pipx 󰇙 uv 󰇙 node
 • z[i] 󰇙 bat 󰇙 tree [-L] 󰇙 [un]tar_gpg
 • btop 󰇙 progress [-w -m]
 • df -hl .. 󰇙 du -hl [--max-depth <int>] ..
-• rg <regex> [--glob ..] [--type <py>] [--no-ignore] [--hidden] [--max-depth ..] \
+• rg <regex> [--glob ..] [--type <py>] [--no-ignore] [--hidden] [--max-depth ..] \n\
     [-l] [-B|A|C <int>] [<path> ...]
-• fd <regex> [--glob ..] [--type d|f] [--no-ignore] [--hidden] [--max|min-depth ..] \
+• fd <regex> [--glob ..] [--type d|f] [--no-ignore] [--hidden] [--max|min-depth ..] \n\
     [--full-path] [-e <py>] [<targetDir>] [--exec <cmd> {} /;]
 • xargs -I % [-0] echo \"%\"
 • ssh [-p <port>] [-NT] [-L [<local>:]<port>:<remote>:<port>] [-J <user>@<hop1>] <user>@<hop2>

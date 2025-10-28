@@ -22,10 +22,9 @@ function existCheck {
 }
 
 
-function helpMe {
-    Write-Host -ForegroundColor Blue '󰗉󰗉󰗉  helpMe  󰗉󰗉󰗉'
-    Write-Host -ForegroundColor DarkCyan @'
-• helpMe
+function manShell {
+    Write-Host -ForegroundColor Blue '󰗉󰗉󰗉  manShell()  󰗉󰗉󰗉'
+    Write-Host -ForegroundColor Green @'
 • conda 󰇙 pipx 󰇙 uv 󰇙 node
 • z[i] 󰇙 bat[diff] 󰇙 nvitop 󰇙 vim
 • rg <regex> [--glob ..] [--type <py>] [--no-ignore] [--hidden] [--max-depth ..] 
@@ -34,8 +33,7 @@ function helpMe {
     [--full-path] [-e <py>] [<targetDir>] [--exec <cmd> {} /;]
 • ssh [-p <port>] [-NT] [-L [<local>:]<port>:<remote>:<port>] [-J <user>@<hop1>] <user>@<hop2>
 • $env:USERPROFILE
-
 '@
 }
 existCheck
-helpMe
+manShell

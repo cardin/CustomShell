@@ -39,8 +39,9 @@ fi
 FNM_PATH="$HOME/.local/share/fnm"
 if [ -d "$FNM_PATH" ]; then
     export PATH="$FNM_PATH:$PATH"
-    # eval "$(fnm env --use-on-cd --version-file-strategy=recursive --shell bash)"
-    # not needed if don't care about auto-switching versions on cd
+    eval "$(fnm env)"
+    # eval "$(fnm env --version-file-strategy=recursive --shell bash)"
+    #  --use-on-cd not needed if don't care about auto-switching versions on cd
 fi
 
 # === zoxide ===
