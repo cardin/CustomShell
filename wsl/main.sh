@@ -3,11 +3,19 @@ current_dir="$(dirname "${BASH_SOURCE[0]}")"
 
 export IS_WSL=$(uname -r | grep -i "microsoft" > /dev/null && echo true || echo false)
 
+# if ~/.local/bin is not in path, add it
+if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
+    export PATH="$HOME/.local/bin:$PATH"
+fi
+
 source "$current_dir/pretty/pretty.sh"
 source "$current_dir/linux.sh"
 source "$current_dir/ssl.sh"
-source "$current_dir/cmd.sh"
-source "$current_dir/wsl.sh"
+
+if [ "$IS_WSL" = true ]; then
+    source "$current_dir/cmd.sh"
+    source "$current_dir/wsl.sh"
+fi
 
 checkInstalled
 manShell

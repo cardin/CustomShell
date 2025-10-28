@@ -1,3 +1,5 @@
+"$schema" = 'https://starship.rs/config-schema.json'
+
 # Design Philosophy:
 # - Lazy to debug formatting
 # - Lazy to test colors
@@ -10,8 +12,6 @@
 # 
 # To install:
 # wget https://raw.githubusercontent.com/cardin/starship/refs/heads/mod/docs/public/presets/toml/catppuccin-powerline.toml -O $STARSHIP_CONFIG
-
-"$schema" = 'https://starship.rs/config-schema.json'
 
 format = """
 [](surface0)\
@@ -131,7 +131,6 @@ palette = 'catppuccin_mocha'
     vimcmd_visual_symbol = '[❮](bold fg:yellow)'
 
 [cmd_duration]
-    show_milliseconds = true
     format = " in $duration "
     style = "bg:surface0 fg:subtext1"
     disabled = false

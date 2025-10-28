@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 PRETTY_SCRIPT_DIR=$(dirname "${BASH_SOURCE[0]}")
 
-source "$PRETTY_SCRIPT_DIR/echo.sh"
-source "$PRETTY_SCRIPT_DIR/tool_formatting.sh"
+source "$PRETTY_SCRIPT_DIR/colors.sh"
+source "$PRETTY_SCRIPT_DIR/tool_activation.sh"
 source "$PRETTY_SCRIPT_DIR/etc_inputrc.sh"
 
 # Check what's installed

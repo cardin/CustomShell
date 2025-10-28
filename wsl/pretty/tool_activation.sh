@@ -15,12 +15,14 @@ if command -v fdfind &>/dev/null; then
 fi
 
 # === fzf ===
-export FZF_DEFAULT_OPTS="--preview 'bat --color=always {}'"
-export FZF_DEFAULT_COMMAND="fd --type f"
-export FZF_CTRL_T_OPTS="
-  --walker-skip .git,node_modules,target
-  --preview 'bat -n --color=always {}'
-  --bind 'ctrl-/:change-preview-window(down|hidden|)'"
+if command -v fzf &>/dev/null; then
+    export FZF_DEFAULT_OPTS="--preview 'bat --color=always {}'"
+    export FZF_DEFAULT_COMMAND="fd --type f"
+    export FZF_CTRL_T_OPTS="
+    --walker-skip .git,node_modules,target
+    --preview 'bat -n --color=always {}'
+    --bind 'ctrl-/:change-preview-window(down|hidden|)'"
+fi
 
 # === starship ===
 if command -v starship &>/dev/null; then
@@ -46,6 +48,5 @@ fi
 
 # === zoxide ===
 if command -v zoxide &>/dev/null; then
-    export PATH="$HOME/.local/bin:$PATH"
     eval "$(zoxide init bash)"
 fi
