@@ -1,10 +1,3 @@
-# Override `ls` with a better version
-Remove-Alias ls -Force
-function ls { 
-    param ([string]$Path) 
-    Get-ChildItem $Path | Format-Wide 
-}
-
 New-Alias ll Get-ChildItem
 New-Alias ping Test-Connection
 New-Alias vi vim
