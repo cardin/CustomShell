@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-my_local_dir=$(dirname "${BASH_SOURCE[0]}")
 
 # === batcat ===
 if command -v batcat &>/dev/null; then
@@ -32,8 +31,6 @@ if command -v starship &>/dev/null; then
     # shellcheck disable=SC2034
     export starship_precmd_user_func="set_win_title"
 
-    # shellcheck disable=SC2155
-    export STARSHIP_CONFIG=$(realpath "$my_local_dir/../../starship.toml")
     eval "$(starship init bash)"
 fi
 
