@@ -1,8 +1,10 @@
+$env:STARSHIP_UPDATE_CHECK = "false"
+
 function Invoke-Starship-PreCommand {
     $host.ui.RawUI.WindowTitle = [System.IO.Path]::GetFileName($pwd)
 }
 # https://github.com/starship/starship/issues/5917#issuecomment-2080401050
-# &starship init powershell --print-full-init | Out-String | Invoke-Expression
+&starship init powershell --print-full-init | Out-String | Invoke-Expression
 
 # Pre Initialize Starship module to avoid slowness
 $null = New-Module starship {
@@ -210,7 +212,10 @@ $null = New-Module starship {
     }
 
     # Set up the session key that will be used to store logs
-    $ENV:STARSHIP_SESSION_KEY = -join ((48..57) + (65..90) + (97..122) | Get-Random -Count 16 | ForEach-Object { [char]$_ })
+    # $ENV:STARSHIP_SESSION_KEY = -join ((48..57) + (65..90) + (97..122) | Get-Random -Count 16 | ForEach-Object { [char]$_ })
+    $ENV:STARSHIP_SESSION_KEY = -join (1..16 | ForEach-Object { 
+            '{0:X}' -f (Get-Random -Maximum 16) 
+        })
 
     # Invoke Starship and set continuation prompt
     Set-PSReadLineOption -ContinuationPrompt (
