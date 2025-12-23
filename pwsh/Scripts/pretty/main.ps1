@@ -1,4 +1,4 @@
-if ($env:WT_SESSION -or ($env:TERM_PROGRAM -eq 'vscode')) {
+if (($env:WT_SESSION -or ($env:TERM_PROGRAM -eq 'vscode')) -and -not $env:SKIP_STARSHIP) {
     $elapsed_starship = Measure-Command { . "$PSScriptRoot/starship.ps1" }
     $elapsed_readline = Measure-Command { . "$PSScriptRoot/readline.ps1" }
 }
