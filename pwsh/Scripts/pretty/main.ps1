@@ -9,5 +9,9 @@ if ($DebugPreference -eq "Continue") {
     Remove-Item Env:STARSHIP_LOG
 }
 
-Write-Debug "`t[Starship] Elapsed time: $($elapsed_starship.TotalSeconds) seconds"
-Write-Debug "`t[Readline] Elapsed time: $($elapsed_readline.TotalSeconds) seconds"
+if ($DebugPreference -eq "Continue" -or $elapsed_starship.TotalSeconds -gt $StartTimeout) {
+    Write-Host "`t[Starship] Elapsed time: $($elapsed_starship.TotalSeconds) seconds"
+}
+if ($DebugPreference -eq "Continue" -or $elapsed_readline.TotalSeconds -gt $StartTimeout) {
+    Write-Host "`t[Readline] Elapsed time: $($elapsed_readline.TotalSeconds) seconds"
+}
