@@ -45,7 +45,7 @@
           "leading_diamond": "",
           "options": {
             "windows": "",
-            "linux": ""
+            "ubuntu": ""
           },
           "template": "{{ .Icon }}"
         },
@@ -87,13 +87,13 @@
           "foreground": "parentForeground",
           "background": "p:green",
           "powerline_symbol": "",
-          "template": "  {{ .Full }}({{ .Venv }}) "
+          "template": "  {{ .Full }} {{ if .Venv }}({{ .Venv }}){{ end }} "
         },
         {
           "type": "node",
           "style": "powerline",
           "foreground": "parentForeground",
-          "background": "p:green",
+          "background": "p:sapphire",
           "powerline_symbol": "",
           "template": " 󰎙 {{ .Full }} "
         },
