@@ -1,5 +1,7 @@
+# === CONFIGURATIONS ===
 # $DebugPreference = "Continue"
 $StartTimeout = 1 # seconds
+# =======================
 
 $elapsed_pretty = Measure-Command { . "$PSScriptRoot/Scripts/pretty/main.ps1" }
 if ($DebugPreference -eq "Continue" -or $elapsed_pretty.TotalSeconds -gt $StartTimeout) {

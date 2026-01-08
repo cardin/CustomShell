@@ -1,0 +1,65 @@
+"$schema" = 'https://starship.rs/config-schema.json'
+
+# Deleting excessive configs to
+# - improve config readability
+# - reduce errors from using the latest unsupported config with an old runtime
+# - remove irrelevant symbols from showing up on console
+# - improve performance
+# For Environments w/o Unicode or Nerd Fonts such as
+# - Headless admin terminal logins
+# - Other shared users
+
+# To install:
+# wget https://raw.githubusercontent.com/cardin/starship/refs/heads/mod/docs/public/presets/toml/plain-text-symbols.toml -O $STARSHIP_CONFIG
+
+continuation_prompt = "[.](bright-black) "
+
+[character]
+    success_symbol = "[>](bold green)"
+    error_symbol = "[x](bold red)"
+    vimcmd_symbol = "[<](bold green)"
+    vimcmd_visual_symbol = "[<](bold yellow)"
+    vimcmd_replace_symbol = "[<](bold purple)"
+    vimcmd_replace_one_symbol = "[<](bold purple)"
+
+[git_commit]
+    format = "[($tag)]($style) "
+    tag_symbol = " tag "
+    tag_disabled = false
+
+[git_status]
+    ahead = ">"
+    behind = "<"
+    diverged = "<>"
+    renamed = "r"
+    deleted = "x"
+
+[conda]
+    symbol = "conda "
+
+[directory]
+    read_only = " ro"
+
+[git_branch]
+    symbol = "git "
+    truncation_symbol = "..."
+
+[hostname]
+    ssh_symbol = "ssh "
+
+[jobs]
+    symbol = "*"
+
+[os.symbols]
+    Ubuntu = "ubnt "
+    Windows = "win "
+
+[python]
+    symbol = "py "
+
+[status]
+    symbol = "[x](bold red) "
+    not_executable_symbol = "noexec"
+    not_found_symbol = "notfound"
+    sigint_symbol = "sigint"
+    signal_symbol = "sig"
