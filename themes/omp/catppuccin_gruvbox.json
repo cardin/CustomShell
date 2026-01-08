@@ -113,7 +113,7 @@
           "type": "executiontime",
           "style": "plain",
           "foreground": "p:subtext1",
-          "template": "  {{ round .FormattedMs 1 }} ",
+          "template": "  {{ .FormattedMs }} ",
           "options": {
             "threshold": 500
           }
