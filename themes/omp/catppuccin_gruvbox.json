@@ -62,7 +62,7 @@
           "foreground": "parentForeground",
           "background": "p:peach",
           "powerline_symbol": "",
-          "template": "  {{ .Path }}{{ if not .Writable }} 󰌾{{ end }} ",
+          "template": "  {{ .Path }}{{ if not .Writable }} 󰌾{{ end }} ",
           "options": {
             "max_depth": 2,
             "style": "agnoster_short",
