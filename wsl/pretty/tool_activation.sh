@@ -25,20 +25,21 @@ if command -v fzf &>/dev/null; then
 fi
 
 # === Oh My Posh ===
-if command -v oh-my-posh &>/dev/null; then
-    eval "$(oh-my-posh init bash --config "$TOOLACTIVATION_SCRIPT_DIR/../../themes/omp/catppuccin_gruvbox.json")"
+if [ "$PRETTY_PROMPT" = "ohmyposh" ] && command -v oh-my-posh &>/dev/null; then
+    eval "$(oh-my-posh init bash --config "$TOOLACTIVATION_SCRIPT_DIR/../../themes/omp/ascii.json")"
+    # eval "$(oh-my-posh init bash --config "$TOOLACTIVATION_SCRIPT_DIR/../../themes/omp/catppuccin_gruvbox.json")"
 fi
 
-# # === starship ===
-# if command -v starship &>/dev/null; then
-#     function set_win_title() {
-#         echo -ne "\033]0;$(basename "$PWD")\007"
-#     }
-#     # shellcheck disable=SC2034
-#     export starship_precmd_user_func="set_win_title"
+# === starship ===
+if [ "$PRETTY_PROMPT" = "starship" ] && command -v starship &>/dev/null; then
+    function set_win_title() {
+        echo -ne "\033]0;$(basename "$PWD")\007"
+    }
+    # shellcheck disable=SC2034
+    export starship_precmd_user_func="set_win_title"
 
-#     eval "$(starship init bash)"
-# fi
+    eval "$(starship init bash)"
+fi
 
 # === fnm ===
 FNM_PATH="$HOME/.local/share/fnm"

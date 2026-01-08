@@ -1,6 +1,7 @@
 # === CONFIGURATIONS ===
 # $DebugPreference = "Continue"
 $StartTimeout = 1 # seconds
+$env:PrettyPromptSelection = 'ohmyposh' # 'ohmyposh' | 'starship'
 # =======================
 
 $elapsed_pretty = Measure-Command { . "$PSScriptRoot/Scripts/pretty/main.ps1" }

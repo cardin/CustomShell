@@ -2,6 +2,7 @@
 current_dir="$(dirname "${BASH_SOURCE[0]}")"
 
 export IS_WSL=$(uname -r | grep -i "microsoft" > /dev/null && echo true || echo false)
+export PRETTY_PROMPT="ohmyposh"  # 'ohmyposh' | 'starship'
 
 # if ~/.local/bin is not in path, add it
 if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then

@@ -9,9 +9,6 @@
 # - Headless admin terminal logins
 # - Other shared users
 
-# To install:
-# wget https://raw.githubusercontent.com/cardin/starship/refs/heads/mod/docs/public/presets/toml/plain-text-symbols.toml -O $STARSHIP_CONFIG
-
 continuation_prompt = "[.](bright-black) "
 
 [character]

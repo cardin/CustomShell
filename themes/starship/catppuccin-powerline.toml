@@ -11,9 +11,6 @@
 # - surface0 : blackest black surface
 # - crust : blackest black test
 
-# To install:
-# wget https://raw.githubusercontent.com/cardin/starship/refs/heads/mod/docs/public/presets/toml/catppuccin-powerline.toml -O $STARSHIP_CONFIG
-
 format = """
 [](red)\
 $os\
