@@ -26,8 +26,12 @@ fi
 
 # === Oh My Posh ===
 if [ "$PRETTY_PROMPT" = "ohmyposh" ] && command -v oh-my-posh &>/dev/null; then
-    eval "$(oh-my-posh init bash --config "$TOOLACTIVATION_SCRIPT_DIR/../../themes/omp/ascii.json")"
-    # eval "$(oh-my-posh init bash --config "$TOOLACTIVATION_SCRIPT_DIR/../../themes/omp/catppuccin_gruvbox.json")"
+    if [ "$IS_BARE_TERMINAL" = true ]; then
+        export OMP_THEME="ascii"
+    else
+        export OMP_THEME="catppuccin_gruvbox"
+    fi
+    eval "$(oh-my-posh init bash --config "$TOOLACTIVATION_SCRIPT_DIR/../../themes/omp/$OMP_THEME.json")"
 fi
 
 # === starship ===

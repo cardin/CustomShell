@@ -9,7 +9,7 @@ source "$PRETTY_SCRIPT_DIR/etc_inputrc.sh"
 checkInstalled() {
     local missing=false
 
-    local -r programs=("bat" "btop" "conda" "delta" "dos2unix" "fd" "fzf"
+    local programs=("bat" "btop" "conda" "delta" "dos2unix" "fd" "fzf"
         "node" "nvitop" "pipx" "progress"
         "rg" "tmux" "tree" "unzip" "uv" "zip" "zoxide")
 
@@ -31,18 +31,15 @@ checkInstalled() {
     fi
 }
 
-manShell () {
+manShell() {
     echo -e "$Blue󰗉󰗉󰗉  manShell ()  󰗉󰗉󰗉"
 
     if [ "$IS_WSL" = true ]; then
-        echo -e "$Green\
-•  wcd ~ 󰇙 wpushd 󰇙 cmd 󰇙 dos2unix 󰇙 release-ram 󰇙 \$USERPROFILE"
+        echo -e "$Green•  wcd ~ 󰇙 wpushd 󰇙 cmd 󰇙 dos2unix 󰇙 release-ram 󰇙 \$USERPROFILE"
     else
-        echo -e "$Green\
-• lazydocker 󰇙 lazygit"
+        echo -e "$Green• lazydocker 󰇙 lazygit"
     fi
-    echo -e "$Green\
-• list_cert_chain
+    echo -e "$Green• list_cert_chain
 • conda 󰇙 pipx 󰇙 uv 󰇙 node
 • z[i] 󰇙 bat 󰇙 tree [-L] 󰇙 [un]tar_gpg
 • btop 󰇙 progress [-w -m]
@@ -57,4 +54,4 @@ manShell () {
 }
 
 # For Tmux
-export TMOUT=604800 # seconds
+export TMOUT=-1 # seconds
