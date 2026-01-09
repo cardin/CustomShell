@@ -58,3 +58,6 @@ fi
 if command -v zoxide &>/dev/null; then
     eval "$(zoxide init bash)"
 fi
+
+# === tmux ===
+alias tmux="tmux -f \$TOOLACTIVATION_SCRIPT_DIR/../../themes/tmux.conf"

@@ -63,6 +63,9 @@ if ! pgrep -u "$USER" ssh-agent >/dev/null; then
 	eval "$(ssh-agent -s)" >/dev/null
 fi
 
+# Git
+git config --global credential.helper 'cache --timeout=21600'
+
 # ===  GNOME Scrollbar issue ===
 # https://bbs.archlinux.org/viewtopic.php?id=196118
 export GTK_OVERLAY_SCROLLING=0

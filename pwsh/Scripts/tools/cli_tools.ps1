@@ -59,3 +59,6 @@ function ssh_get_config {
     Sort-Object Alias |
     Format-Table -AutoSize
 }
+
+# Git
+git config --global credential.helper 'cache --timeout=21600'
