@@ -72,7 +72,7 @@
         },
         {
           "type": "git",
-          "style": "powerline",
+          "style": "accordion",
           "foreground": "parentForeground",
           "background": "p:yellow",
           "powerline_symbol": "",
