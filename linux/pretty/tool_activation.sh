@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-TOOLACTIVATION_SCRIPT_DIR=$(dirname "${BASH_SOURCE[0]}")
 
 # === batcat ===
 if command -v batcat &>/dev/null; then
@@ -7,11 +6,21 @@ if command -v batcat &>/dev/null; then
 fi
 if command -v bat &>/dev/null; then
     export MANPAGER="sh -c 'col -bx | bat -l man -p'"
+    export BAT_CONFIG_PATH="$PROJ_DIR/config/bat.conf"
 fi
 
 # === fd-find ===
 if command -v fdfind &>/dev/null; then
     alias fd="fdfind"
+fi
+
+# === fnm ===
+FNM_PATH="$HOME/.local/share/fnm"
+if [ -d "$FNM_PATH" ]; then
+    export PATH="$FNM_PATH:$PATH"
+    eval "$(fnm env)"
+    # eval "$(fnm env --version-file-strategy=recursive --shell bash)"
+    #  --use-on-cd not needed if don't care about auto-switching versions on cd
 fi
 
 # === fzf ===
@@ -31,7 +40,7 @@ if [ "$PRETTY_PROMPT" = "ohmyposh" ] && command -v oh-my-posh &>/dev/null; then
     else
         export OMP_THEME="catppuccin_gruvbox"
     fi
-    eval "$(oh-my-posh init bash --config "$TOOLACTIVATION_SCRIPT_DIR/../../themes/omp/$OMP_THEME.json")"
+    eval "$(oh-my-posh init bash --config "$PROJ_DIR/config/omp/$OMP_THEME.json")"
 fi
 
 # === starship ===
@@ -45,19 +54,10 @@ if [ "$PRETTY_PROMPT" = "starship" ] && command -v starship &>/dev/null; then
     eval "$(starship init bash)"
 fi
 
-# === fnm ===
-FNM_PATH="$HOME/.local/share/fnm"
-if [ -d "$FNM_PATH" ]; then
-    export PATH="$FNM_PATH:$PATH"
-    eval "$(fnm env)"
-    # eval "$(fnm env --version-file-strategy=recursive --shell bash)"
-    #  --use-on-cd not needed if don't care about auto-switching versions on cd
-fi
+# === tmux ===
+alias tmux="tmux -f \$PROJ_DIR/config/tmux.conf"
 
 # === zoxide ===
 if command -v zoxide &>/dev/null; then
     eval "$(zoxide init bash)"
 fi
-
-# === tmux ===
-alias tmux="tmux -f \$TOOLACTIVATION_SCRIPT_DIR/../../themes/tmux.conf"

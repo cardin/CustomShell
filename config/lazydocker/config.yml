@@ -1,0 +1,22 @@
+# https://github.com/jesseduffield/lazydocker/blob/master/docs/Config.md
+# ~/.config/lazydocker/config.yml
+customCommands:
+  containers:
+    - name: bash
+      attach: true
+      command: "docker exec -it {{ .Container.ID }} bash"
+      serviceNames: []
+    - name: bash root
+      attach: true
+      command: "docker exec -it -u root {{ .Container.ID }} bash"
+      serviceNames: []
+    - name: shell
+      attach: true
+      command: "docker exec -it {{ .Container.ID }} sh"
+      serviceNames: []
+    - name: shell root
+      attach: true
+      command: "docker exec -it -u root {{ .Container.ID }} sh"
+      serviceNames: []
+gui:
+  returnImmediately: true

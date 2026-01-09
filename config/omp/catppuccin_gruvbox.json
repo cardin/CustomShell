@@ -54,7 +54,7 @@
           "style": "powerline",
           "foreground": "parentForeground",
           "background": "parentBackground",
-          "template": " {{ .UserName }}{{ if .SSHSession }}  {{ .HostName }}{{ end }} "
+          "template": " {{ .UserName }}  {{ .HostName }} "
         },
         {
           "type": "path",

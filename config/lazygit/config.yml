@@ -1,0 +1,6 @@
+# https://github.com/jesseduffield/lazygit/blob/master/docs/Custom_Pagers.md
+# ~/.config/lazygit/config.yml
+git:
+  pagers:
+    - pager: delta --dark --paging=never
+      colorArg: always

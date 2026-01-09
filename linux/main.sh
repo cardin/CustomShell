@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-current_dir="$(dirname "${BASH_SOURCE[0]}")"
-
+export LINUX_SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]}")"
+export PROJ_DIR="$(dirname "$LINUX_SCRIPT_DIR")"
 export IS_WSL=$(uname -r | grep -i "microsoft" >/dev/null && echo true || echo false)
 export PRETTY_PROMPT="ohmyposh" # 'ohmyposh' | 'starship'
 if [[ "$USER" == "root" || "$USER" == *-admin ]]; then
@@ -14,13 +14,13 @@ if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
     export PATH="$HOME/.local/bin:$PATH"
 fi
 
-source "$current_dir/pretty/pretty.sh"
-source "$current_dir/linux.sh"
-source "$current_dir/ssl.sh"
+source "$LINUX_SCRIPT_DIR/pretty/pretty.sh"
+source "$LINUX_SCRIPT_DIR/linux.sh"
+source "$LINUX_SCRIPT_DIR/ssl.sh"
 
 if [ "$IS_WSL" = true ]; then
-    source "$current_dir/cmd.sh"
-    source "$current_dir/wsl.sh"
+    source "$LINUX_SCRIPT_DIR/cmd.sh"
+    source "$LINUX_SCRIPT_DIR/wsl.sh"
 fi
 
 # Only show startup messages if not inside tmux
