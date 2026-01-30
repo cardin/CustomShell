@@ -3,6 +3,17 @@ New-Alias ping Test-Connection
 New-Alias vi vim
 New-Alias which Get-Command
 
+
+# if codex command doesn't already exist, create alias to run codex in WSL
+if (!(Get-Command codex -ErrorAction SilentlyContinue)) {
+    function cx { wsl bash -lic "codex $args" }
+    Set-Alias codex cx
+}
+
+if (Get-Command bat -ErrorAction SilentlyContinue) {
+    function batx { bat --style='changes,header,grid' $args }
+}
+
 function ssh_get_config {
     # Parse and display SSH config file entries in a table
     param()

@@ -9,7 +9,7 @@ source "$PRETTY_SCRIPT_DIR/etc_inputrc.sh"
 checkInstalled() {
     local missing=false
 
-    local programs=("bat" "btop" "conda" "delta" "dos2unix" "fd" "fzf"
+    local programs=("bat" "btop" "codex" "conda" "delta" "dos2unix" "fd" "fzf"
         "node" "nvitop" "pipx" "progress"
         "rg" "tmux" "tree" "unzip" "uv" "zip" "zoxide")
 

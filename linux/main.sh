@@ -8,6 +8,11 @@ if [[ "$USER" == "root" || "$USER" == *-admin ]]; then
 else
     export IS_BARE_TERMINAL=false
 fi
+if [[ "$USER" != "cardin" ]]; then
+    export IS_WORK_DEVICE=true
+else
+    export IS_WORK_DEVICE=false
+fi
 
 # if ~/.local/bin is not in path, add it
 if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
