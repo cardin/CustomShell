@@ -22,7 +22,7 @@ checkInstalled() {
         # shellcheck disable=SC2155
         local type_output=$(type "$program" 2>/dev/null)
         if [[ ($type_output == "$pattern"*) || (! $type_output) ]]; then
-            echo -n "󰬅$program "
+            echo -e -n "${Red}󰬅$program "
             missing=true
         fi
     done

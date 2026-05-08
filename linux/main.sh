@@ -18,6 +18,10 @@ fi
 if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
     export PATH="$HOME/.local/bin:$PATH"
 fi
+# if /home/linuxbrew exists and is not in path, add it
+if [ -d "/home/linuxbrew" ] && [[ ":$PATH:" != *":/home/linuxbrew/.linuxbrew/bin:"* ]]; then
+    export PATH="/home/linuxbrew/.linuxbrew/bin:$PATH"
+fi
 
 source "$LINUX_SCRIPT_DIR/pretty/pretty.sh"
 source "$LINUX_SCRIPT_DIR/linux.sh"

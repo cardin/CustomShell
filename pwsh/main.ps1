@@ -16,7 +16,7 @@ if ($DebugPreference -eq "Continue" -or $elapsed_tools.TotalSeconds -gt $StartTi
 
 function existCheck {
     # Iterate through an array of command names, checking if the command exists
-    $commandNames = "bat", "conda", "delta", "fd", "less", "node", "nvitop", "rg", "vim", "uv", "zoxide"
+    $commandNames = "bat", "conda", "delta", "fd", "less", "node", "nvitop", "rg", "vim", "zoxide"
     $missing = $false
     foreach ($name in $commandNames) {
         if (!(Get-Command $name -ErrorAction SilentlyContinue)) {
@@ -33,7 +33,7 @@ function existCheck {
 function manShell {
     Write-Host -ForegroundColor Blue '󰗉󰗉󰗉  manShell()  󰗉󰗉󰗉'
     Write-Host -ForegroundColor Green @'
-• conda 󰇙 pipx 󰇙 uv 󰇙 node
+• conda 󰇙 pipx 󰇙 node
 • z[i] 󰇙 bat[diff] 󰇙 nvitop 󰇙 vim
 • rg <regex> [--glob ..] [--type <py>] [--no-ignore] [--hidden] [--max-depth ..] 
     [-l] [-B|A|C <int>] [<path> ...]
