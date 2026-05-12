@@ -9,9 +9,9 @@ source "$PRETTY_SCRIPT_DIR/etc_inputrc.sh"
 checkInstalled() {
     local missing=false
 
-    local programs=("bat" "btop" "codex" "conda" "delta" "dos2unix" "fd" "fzf"
+    local programs=("bat" "btop" "conda" "delta" "dos2unix" "fd" "fzf"
         "node" "nvitop" "pipx" "progress"
-        "rg" "tmux" "tree" "unzip" "uv" "zip" "zoxide")
+        "rg" "tmux" "tree" "unzip" "zip" "zoxide")
 
     if [ "$IS_WSL" = false ]; then
         programs+=("lazygit" "lazydocker")
@@ -40,7 +40,7 @@ manShell() {
         echo -e "$Green• lazydocker 󰇙 lazygit"
     fi
     echo -e "$Green• list_cert_chain
-• conda 󰇙 pipx 󰇙 uv 󰇙 node
+• conda 󰇙 pipx 󰇙 node
 • z[i] 󰇙 bat 󰇙 tree [-L] 󰇙 [un]tar_gpg
 • btop 󰇙 progress [-w -m]
 • df -hl .. 󰇙 du -hl [--max-depth <int>] ..

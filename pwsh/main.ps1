@@ -16,7 +16,7 @@ if ($DebugPreference -eq "Continue" -or $elapsed_tools.TotalSeconds -gt $StartTi
 
 function existCheck {
     # Iterate through an array of command names, checking if the command exists
-    $commandNames = "bat", "conda", "delta", "fd", "less", "node", "nvitop", "rg", "vim", "zoxide"
+    $commandNames = "bat", "conda", "delta", "fd", "fzf", "less", "node", "nvitop", "pipx", "rg", "vim", "zoxide"
     $missing = $false
     foreach ($name in $commandNames) {
         if (!(Get-Command $name -ErrorAction SilentlyContinue)) {
