@@ -76,3 +76,6 @@ function ssh_get_config {
 
 # Git
 git config --global credential.helper 'cache --timeout=21600'
+
+# Python
+$env:UV_SYSTEM_CERTS = "true"
