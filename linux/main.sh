@@ -3,7 +3,10 @@ export LINUX_SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]}")"
 export PROJ_DIR="$(dirname "$LINUX_SCRIPT_DIR")"
 export IS_WSL=$(uname -r | grep -i "microsoft" >/dev/null && echo true || echo false)
 export PRETTY_PROMPT="ohmyposh" # 'ohmyposh' | 'starship'
-if [[ "$USER" == "root" || "$USER" == *-admin ]]; then
+export UTF8_ENABLED=$(
+    [[ $(locale charmap 2>/dev/null) == UTF-8 ]] && echo true || echo false
+)
+if [[ ("$USER" == "root" || "$USER" == *-admin) && "$IS_WSL" = false && "$UTF8_ENABLED" = true ]]; then
     export IS_BARE_TERMINAL=true
 else
     export IS_BARE_TERMINAL=false
@@ -37,3 +40,6 @@ if [ -z "$TMUX" ]; then
     checkInstalled
     manShell
 fi
+
+# generate conf retroactively
+source "$LINUX_SCRIPT_DIR/env.sh"

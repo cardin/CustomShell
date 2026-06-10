@@ -1,6 +1,7 @@
 New-Alias pwsh pwsh_x
 New-Alias powershell pwsh_x
 
+function rmrf { Remove-Item -Recurse -Force $args }
 New-Alias ll Get-ChildItem
 New-Alias ping Test-Connection
 New-Alias vi vim
