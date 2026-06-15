@@ -10,11 +10,11 @@ checkInstalled() {
     local missing=false
 
     local programs=("bat" "btop" "conda" "delta" "dos2unix" "fd" "fzf"
-        "node" "nvitop" "pipx" "progress"
+        "node" "pipx" "progress"
         "rg" "tmux" "tree" "unzip" "zip" "zoxide")
 
     if [ "$IS_WSL" = false ]; then
-        programs+=("lazygit" "lazydocker")
+        programs+=("lazygit" "lazydocker" "nvitop")
     fi
 
     for program in "${programs[@]}"; do
@@ -37,7 +37,7 @@ manShell() {
     if [ "$IS_WSL" = true ]; then
         echo -e "$Green•  wcd ~ 󰇙 wpushd 󰇙 cmd 󰇙 dos2unix 󰇙 release-ram 󰇙 \$USERPROFILE"
     else
-        echo -e "$Green• lazydocker 󰇙 lazygit"
+        echo -e "$Green• lazydocker 󰇙 lazygit 󰇙 nvitop"
     fi
     echo -e "$Green• list_cert_chain
 • conda 󰇙 pipx 󰇙 node
