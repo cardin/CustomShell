@@ -7,7 +7,7 @@ fi
 if command -v bat &>/dev/null; then
     export MANPAGER="sh -c 'col -bx | bat -l man -p'"
     export BAT_CONFIG_PATH="$PROJ_DIR/config/bat.conf"
-    alias batx="bat --style=changes,header,grid"
+    alias bat_nonum="bat --style=header,grid"
 fi
 
 # === fd-find ===
