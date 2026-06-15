@@ -14,14 +14,14 @@ If ($env:CONDA_PATH -and (Test-Path "$env:CONDA_PATH\conda.exe")) {
 if (Get-Command fnm -ErrorAction SilentlyContinue) {
     fnm env --use-on-cd --shell powershell | Out-String | Invoke-Expression
 
-#     function _lazyLoadFnm {
-#         param($zArgs)
-#         Remove-Item Function:\fnm -ErrorAction SilentlyContinue
-#         Invoke-Expression (& { (fnm env --shell powershell | Out-String) })
+    #     function _lazyLoadFnm {
+    #         param($zArgs)
+    #         Remove-Item Function:\fnm -ErrorAction SilentlyContinue
+    #         Invoke-Expression (& { (fnm env --shell powershell | Out-String) })
         
-#         & fnm @zArgs
-#     }
-#     function fnm { _lazyLoadFnm $args }
+    #         & fnm @zArgs
+    #     }
+    #     function fnm { _lazyLoadFnm $args }
 }
 
 # ====== ZOXIDE ======
