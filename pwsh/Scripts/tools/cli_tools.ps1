@@ -7,6 +7,9 @@ New-Alias ping Test-Connection
 New-Alias vi vim
 New-Alias which Get-Command
 
+if (!(Get-Command batx -ErrorAction SilentlyContinue)) {
+    function bat_nonum { bat --style='header,grid' $args }
+}
 
 # if codex command doesn't already exist, create alias to run codex in WSL
 if (!(Get-Command codex -ErrorAction SilentlyContinue)) {
