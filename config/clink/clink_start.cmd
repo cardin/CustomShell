@@ -7,9 +7,16 @@ if not defined FNM_AUTORUN_GUARD (
 )
 
 :: Create useful aliases (doskey)
-doskey ls=dir /B
-doskey ll=dir
-doskey grep=findstr
+where coreutils >nul 2>&1 && (
+    doskey rm=rm.exe $*
+    doskey ls=ls.exe --color=auto $*
+    doskey ll=ls.exe -la --color=auto $*
+) || (
+    doskey rm=del $*
+    doskey ls=dir /B $*
+    doskey ll=dir $*
+    doskey grep=findstrs
+)
 doskey pwsh=pwsh_x
 doskey powershell=pwsh_x
 
