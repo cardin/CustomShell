@@ -35,7 +35,7 @@ manShell() {
     echo -e "$Blue󰗉󰗉󰗉  manShell ()  󰗉󰗉󰗉"
 
     if [ "$IS_WSL" = true ]; then
-        echo -e "$Green•  wcd ~ 󰇙 wpushd 󰇙 cmd 󰇙 dos2unix 󰇙 release-ram 󰇙 \$USERPROFILE"
+        echo -e "$Green•  wcd ~ 󰇙 wpushd 󰇙 cmd 󰇙 dos2unix 󰇙 release-ram 󰇙 mirror-win-ssh 󰇙 \$USERPROFILE"
     else
         echo -e "$Green• lazydocker 󰇙 lazygit 󰇙 nvitop"
     fi
