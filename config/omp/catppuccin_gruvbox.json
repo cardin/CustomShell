@@ -50,6 +50,20 @@
           "template": "{{ .Icon }}"
         },
         {
+          "type": "shell",
+          "style": "powerline",
+          "foreground": "parentForeground",
+          "background": "parentBackground",
+          "template": "{{ .Name }}",
+          "options": {
+            "mapped_shell_names": {
+              "pwsh": "",
+              "bash": "",
+              "cmd": " (CMD)"
+            }
+          }
+        },
+        {
           "type": "session",
           "style": "powerline",
           "foreground": "parentForeground",
