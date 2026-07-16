@@ -2,6 +2,22 @@
 # $DebugPreference = "Continue"
 $StartTimeout = 1 # seconds
 $env:PrettyPromptSelection = 'ohmyposh' # 'ohmyposh' | 'starship'
+
+function getParentProcess {
+    $processChain = @()
+    $processId = $PID
+    while ($processId -ne 0) {
+        $proc = Get-CimInstance Win32_Process -Filter "ProcessId=$processId" -ErrorAction SilentlyContinue
+        if (-not $proc) { break }
+        $processChain += $proc.Name
+        $processId = $proc.ParentProcessId
+    }
+    return $processChain
+}
+$processChain = getParentProcess
+$env:IsBareTerminal = [bool]($processChain | Where-Object {
+        $_ -in @("WindowsTerminal.exe", "cmd.exe")
+    })
 # =======================
 
 $elapsed_pretty = Measure-Command { . "$PSScriptRoot/Scripts/pretty/main.ps1" }

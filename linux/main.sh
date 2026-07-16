@@ -6,7 +6,8 @@ export PRETTY_PROMPT="ohmyposh" # 'ohmyposh' | 'starship'
 export UTF8_ENABLED=$(
     [[ $(locale charmap 2>/dev/null) == UTF-8 ]] && echo true || echo false
 )
-if [[ ("$USER" == "root" || "$USER" == *-admin) && "$IS_WSL" = false && "$UTF8_ENABLED" = true ]]; then
+
+if [[ ("$USER" == "root" || "$USER" == *-admin) || ("$IS_WSL" = true && "$WT_SESSION" == "") ]]; then
     export IS_BARE_TERMINAL=true
 else
     export IS_BARE_TERMINAL=false

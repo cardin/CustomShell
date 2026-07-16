@@ -1,2 +1,8 @@
-# oh-my-posh init pwsh --config "$PSScriptRoot/../../../config/omp/ascii.json" | Invoke-Expression
-oh-my-posh init pwsh --config "$PSScriptRoot/../../../config/omp/catppuccin_gruvbox.json" | Invoke-Expression
+$theme = if ($env:IsBareTerminal -ne "True") {
+    "ascii.json"
+}
+else {
+    "catppuccin_gruvbox.json"
+}
+
+oh-my-posh init pwsh --config "$PSScriptRoot/../../../config/omp/$theme" | Invoke-Expression
