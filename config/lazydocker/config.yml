@@ -1,5 +1,4 @@
 # https://github.com/jesseduffield/lazydocker/blob/master/docs/Config.md
-# ~/.config/lazydocker/config.yml
 customCommands:
   containers:
     - name: bash

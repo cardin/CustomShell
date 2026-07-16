@@ -34,6 +34,18 @@ if command -v fzf &>/dev/null; then
     --bind 'ctrl-/:change-preview-window(down|hidden|)'"
 fi
 
+# === LazyDocker ===
+if command -v lazydocker &>/dev/null; then
+    function lazydocker() {
+        XDG_CONFIG_HOME="$PROJ_DIR/config" command lazydocker "$@"
+    }
+fi
+
+# === LazyGit ===
+if command -v lazygit &>/dev/null; then
+    export LG_CONFIG_FILE="$PROJ_DIR/config/lazygit/config.yml"
+fi
+
 # === Oh My Posh ===
 if [ "$PRETTY_PROMPT" = "ohmyposh" ] && command -v oh-my-posh &>/dev/null; then
     if [ "$IS_BARE_TERMINAL" = true ]; then
