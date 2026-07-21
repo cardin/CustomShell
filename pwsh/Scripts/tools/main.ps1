@@ -8,3 +8,8 @@ $elapsed_env_activators = Measure-Command { . "$PSScriptRoot/env_activators.ps1"
 if ($DebugPreference -eq "Continue" -or $elapsed_env_activators.TotalSeconds -gt $StartTimeout) {
     Write-Host "`t[EnvActivators] Elapsed time: $($elapsed_env_activators.TotalSeconds) seconds"
 }
+
+. "$PSScriptRoot/TarEnc.ps1"
+
+# ===== VSCODE =====
+if ($env:TERM_PROGRAM -eq "vscode") { . "$(code --locate-shell-integration-path pwsh)" }

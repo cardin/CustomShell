@@ -41,7 +41,7 @@ manShell() {
     fi
     echo -e "$Green• list_cert_chain
 • conda 󰇙 pipx 󰇙 node
-• z[i] 󰇙 bat 󰇙 tree [-L] 󰇙 [un]tar_gpg
+• z[i] 󰇙 bat 󰇙 tree [-L] 󰇙 [un]tar_gpg 󰇙 [un]tar_enc
 • btop 󰇙 progress [-w -m]
 • df -hl .. 󰇙 du -hl [--max-depth <int>] ..
 • rg <regex> [--glob ..] [--type <py>] [--no-ignore] [--hidden] [--max-depth ..] \n\

@@ -50,7 +50,7 @@ function manShell {
     Write-Host -ForegroundColor Blue '󰗉󰗉󰗉  manShell()  󰗉󰗉󰗉'
     Write-Host -ForegroundColor Green @'
 • conda 󰇙 pipx 󰇙 node
-• z[i] 󰇙 bat[diff] 󰇙 nvitop 󰇙 vim
+• z[i] 󰇙 bat[diff] 󰇙 nvitop 󰇙 vim 󰇙 [Un]TarEnc 
 • rg <regex> [--glob ..] [--type <py>] [--no-ignore] [--hidden] [--max-depth ..] 
     [-l] [-B|A|C <int>] [<path> ...]
 • fd <regex> [--glob ..] [--type d|f] [--no-ignore] [--hidden] [--max|min-depth ..] 
