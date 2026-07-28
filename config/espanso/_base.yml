@@ -18,7 +18,7 @@ matches:
     replace: "≈"
   - trigger: "+-"
     replace: "±"
-  - trigger: ":inf:"
+  - trigger: ":inf"
     replace: "∞"
   - trigger: ":deg"
     replace: "°"
