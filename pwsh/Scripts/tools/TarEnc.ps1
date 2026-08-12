@@ -13,8 +13,8 @@ function TarEnc {
     Folder to archive.
 
     .PARAMETER Output
-    Encrypted output file. Defaults to <folder>.tar.gz.enc beside the
-    source folder.
+    Encrypted output file. Defaults to <folder>_<yyyyMMdd_HHmmss>.tar.gz.enc
+    beside the source folder.
 
     .PARAMETER Force
     Replaces the output file if it already exists.
@@ -68,9 +68,10 @@ You can verify it with:
     }
 
     if ([string]::IsNullOrWhiteSpace($Output)) {
+        $timestamp = Get-Date -Format 'yyyyMMdd_HHmmss'
         $Output = Join-Path `
             $sourceItem.Parent.FullName `
-            "$($sourceItem.Name).tar.gz.enc"
+            "$($sourceItem.Name)_$timestamp.tar.gz.enc"
     }
 
     $outputPath = $ExecutionContext.SessionState.Path.

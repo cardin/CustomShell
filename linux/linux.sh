@@ -55,8 +55,8 @@ function untar_gpg {
 }
 
 function tar_enc {
-	if [[ $# -ne 2 ]]; then
-		echo "Usage: tar_enc <source_directory> <output_file.tar.gz.enc>"
+	if [[ $# -lt 1 || $# -gt 2 ]]; then
+		echo "Usage: tar_enc <source_directory> [output_file.tar.gz.enc]"
 		return 1
 	fi
 
@@ -66,6 +66,12 @@ function tar_enc {
 	if [[ ! -d "$src" ]]; then
 		echo "Error: '$src' is not a directory."
 		return 1
+	fi
+
+	if [[ -z "$out" ]]; then
+		local timestamp
+		timestamp="$(date +%Y%m%d_%H%M%S)"
+		out="$(dirname "$src")/$(basename "$src")_${timestamp}.tar.gz.enc"
 	fi
 
 	if ! command -v openssl >/dev/null 2>&1; then
