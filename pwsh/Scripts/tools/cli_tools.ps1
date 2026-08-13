@@ -54,10 +54,12 @@ if (Get-Command bat -ErrorAction SilentlyContinue) {
 }
 
 function ssh_get_config {
-    # Parse and display SSH config file entries in a table
-    param()
+    # Parse SSH config file entries and return reusable objects.
+    param(
+        [ValidateNotNullOrEmpty()]
+        [string] $ConfigPath = (Join-Path $HOME ".ssh\config")
+    )
 
-    $configPath = Join-Path $HOME ".ssh\config"
     if (-not (Test-Path -LiteralPath $configPath)) {
         Write-Warning "No SSH config file found at $configPath"
         return
@@ -72,6 +74,7 @@ function ssh_get_config {
 
         if ($line -match '^(?i)Host\s+(.+)$') {
             $tokens = $Matches[1] -split '\s+'
+            $currentAliases = @()
             foreach ($alias in $tokens) {
                 $obj = [pscustomobject]@{
                     Alias    = $alias
@@ -80,7 +83,7 @@ function ssh_get_config {
                     Port     = $null
                 }
                 $results += $obj
-                $currentAliases = @($obj)
+                $currentAliases += $obj
             }
             continue
         }
@@ -106,8 +109,7 @@ function ssh_get_config {
 
     $results |
     Where-Object { $_.Alias -notmatch '[\*\?]' } |
-    Sort-Object Alias |
-    Format-Table -AutoSize
+    Sort-Object Alias
 }
 
 # Git

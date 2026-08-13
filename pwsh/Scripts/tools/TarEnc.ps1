@@ -77,12 +77,10 @@ You can verify it with:
     $outputPath = $ExecutionContext.SessionState.Path.
     GetUnresolvedProviderPathFromPSPath($Output)
 
-    if (Test-Path -LiteralPath $outputPath) {
-        if (-not $Force) {
-            throw "Output file already exists: $outputPath`nUse -Force to replace it."
-        }
+    $outputExists = Test-Path -LiteralPath $outputPath
 
-        Remove-Item -LiteralPath $outputPath -Force -ErrorAction Stop
+    if ($outputExists -and -not $Force) {
+        throw "Output file already exists: $outputPath`nUse -Force to replace it."
     }
 
     $outputDirectory = Split-Path -Parent $outputPath
@@ -102,6 +100,16 @@ You can verify it with:
     $temporaryTar = Join-Path `
     ([IO.Path]::GetTempPath()) `
         "$([guid]::NewGuid()).tar.gz"
+
+    # Keep the encrypted temporary file on the destination volume so replacing
+    # an existing archive can be performed atomically after encryption succeeds.
+    $temporaryOutput = Join-Path `
+        $outputDirectory `
+        ".$([IO.Path]::GetFileName($outputPath)).$([guid]::NewGuid()).tmp"
+
+    $replacementBackup = Join-Path `
+        $outputDirectory `
+        ".$([IO.Path]::GetFileName($outputPath)).$([guid]::NewGuid()).bak"
 
     try {
         Write-Verbose "Creating temporary archive: $temporaryTar"
@@ -126,27 +134,25 @@ You can verify it with:
             -pbkdf2 `
             -iter 600000 `
             -in $temporaryTar `
-            -out $outputPath
+            -out $temporaryOutput
 
         if ($LASTEXITCODE -ne 0) {
             throw "OpenSSL encryption failed with exit code $LASTEXITCODE."
         }
 
+        if ($outputExists) {
+            [IO.File]::Replace($temporaryOutput, $outputPath, $replacementBackup)
+        }
+        else {
+            [IO.File]::Move($temporaryOutput, $outputPath)
+        }
+
         Write-Verbose 'Encrypted archive created successfully.'
-
         Get-Item -LiteralPath $outputPath
-    }
-    catch {
-        Remove-Item `
-            -LiteralPath $outputPath `
-            -Force `
-            -ErrorAction SilentlyContinue
-
-        throw
     }
     finally {
         Remove-Item `
-            -LiteralPath $temporaryTar `
+            -LiteralPath $temporaryTar, $temporaryOutput, $replacementBackup `
             -Force `
             -ErrorAction SilentlyContinue
     }
@@ -216,21 +222,19 @@ You can verify it with:
     $destinationPath = $ExecutionContext.SessionState.Path.
     GetUnresolvedProviderPathFromPSPath($Destination)
 
-    if (-not (Test-Path -LiteralPath $destinationPath)) {
-        New-Item `
-            -ItemType Directory `
-            -Path $destinationPath `
-            -Force `
-            -ErrorAction Stop |
-        Out-Null
-    }
-    elseif (-not (Test-Path -LiteralPath $destinationPath -PathType Container)) {
+    $destinationExists = Test-Path -LiteralPath $destinationPath
+
+    if ($destinationExists -and -not (Test-Path -LiteralPath $destinationPath -PathType Container)) {
         throw "'$destinationPath' is not a folder."
     }
 
     $temporaryTar = Join-Path `
     ([IO.Path]::GetTempPath()) `
         "$([guid]::NewGuid()).tar.gz"
+
+    $stagingDirectory = Join-Path `
+    ([IO.Path]::GetTempPath()) `
+        "$([guid]::NewGuid())"
 
     try {
         Write-Verbose "Decrypting archive to temporary file: $temporaryTar"
@@ -254,14 +258,56 @@ archive may have been created with different OpenSSL options.
 "@
         }
 
-        Write-Verbose "Extracting archive into: $destinationPath"
+        Write-Verbose 'Validating archive entries.'
+
+        $archiveEntries = @(& $tar.Source -tzf $temporaryTar)
+
+        if ($LASTEXITCODE -ne 0) {
+            throw "tar.exe could not read the archive (exit code $LASTEXITCODE)."
+        }
+
+        foreach ($entry in $archiveEntries) {
+            $normalizedEntry = ([string] $entry).Replace('\', '/')
+            $segments = $normalizedEntry -split '/'
+
+            if (
+                $normalizedEntry.StartsWith('/') -or
+                $normalizedEntry -match '^[A-Za-z]:' -or
+                $segments -contains '..'
+            ) {
+                throw "Unsafe archive entry: $entry"
+            }
+        }
+
+        New-Item `
+            -ItemType Directory `
+            -Path $stagingDirectory `
+            -ErrorAction Stop |
+        Out-Null
+
+        Write-Verbose "Extracting archive into staging directory: $stagingDirectory"
 
         & $tar.Source `
             -xzf $temporaryTar `
-            -C $destinationPath
+            -C $stagingDirectory
 
         if ($LASTEXITCODE -ne 0) {
             throw "tar.exe extraction failed with exit code $LASTEXITCODE."
+        }
+
+        if (-not $destinationExists) {
+            Move-Item `
+                -LiteralPath $stagingDirectory `
+                -Destination $destinationPath `
+                -ErrorAction Stop
+        }
+        else {
+            Get-ChildItem -LiteralPath $stagingDirectory -Force |
+            Copy-Item `
+                -Destination $destinationPath `
+                -Recurse `
+                -Force `
+                -ErrorAction Stop
         }
 
         Write-Verbose 'Archive extracted successfully.'
@@ -270,7 +316,8 @@ archive may have been created with different OpenSSL options.
     }
     finally {
         Remove-Item `
-            -LiteralPath $temporaryTar `
+            -LiteralPath $temporaryTar, $stagingDirectory `
+            -Recurse `
             -Force `
             -ErrorAction SilentlyContinue
     }
