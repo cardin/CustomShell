@@ -59,5 +59,8 @@ function manShell {
 • $env:USERPROFILE
 '@
 }
-existCheck
-manShell
+# Only show startup messages on a bare terminal (e.g. Windows Terminal, cmd), not embedded sessions
+if ($env:IsBareTerminal -eq "True") {
+    existCheck
+    manShell
+}
