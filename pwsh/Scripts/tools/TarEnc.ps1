@@ -141,7 +141,18 @@ You can verify it with:
         }
 
         if ($outputExists) {
-            [IO.File]::Replace($temporaryOutput, $outputPath, $replacementBackup)
+            # ReplaceFile/File.Replace can be rejected by some Windows
+            # filesystems and sandbox providers. Use same-directory renames so
+            # the original can still be restored if publishing the new archive
+            # fails.
+            [IO.File]::Move($outputPath, $replacementBackup)
+            try {
+                [IO.File]::Move($temporaryOutput, $outputPath)
+            }
+            catch {
+                [IO.File]::Move($replacementBackup, $outputPath)
+                throw
+            }
         }
         else {
             [IO.File]::Move($temporaryOutput, $outputPath)
@@ -312,7 +323,7 @@ archive may have been created with different OpenSSL options.
 
         Write-Verbose 'Archive extracted successfully.'
 
-        Get-Item -LiteralPath $destinationPath
+        Get-ChildItem -LiteralPath $destinationPath -Force
     }
     finally {
         Remove-Item `

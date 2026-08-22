@@ -23,3 +23,12 @@ Append the following line to your Bash Profile `~/.bashrc`:
 ```sh
 . ~/config/CustomShell/linux/main.sh
 ```
+
+## PowerShell tests
+
+The PowerShell regression tests require Pester 3.4 or newer and `tar.exe` in
+`PATH`:
+
+```ps1
+Invoke-Pester ./pwsh/Tests
+```
