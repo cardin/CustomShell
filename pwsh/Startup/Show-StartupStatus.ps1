@@ -43,7 +43,7 @@ function global:Show-CustomShellHelp {
     Write-Host -ForegroundColor Green @'
 • Protect-Tar / Unprotect-Tar
 • Get-SSHConfig
-• z / zi / Show-FileWithBat / vim
+• z / zi / batx / vim
 • rg <pattern> [path] / fd <pattern> [path]
 • ssh [-p <port>] [-J <jump-host>] <host>
 '@

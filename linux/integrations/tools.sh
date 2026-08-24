@@ -9,7 +9,7 @@ fi
 if command -v bat >/dev/null 2>&1; then
     export MANPAGER="sh -c 'col -bx | bat -l man -p'"
     export BAT_CONFIG_PATH="$PROJ_DIR/config/bat.conf"
-    alias bat_nonum="bat --style=header,grid"
+    alias batx="bat --style=header,grid"
 fi
 if command -v fdfind >/dev/null 2>&1; then
     alias fd="fdfind"

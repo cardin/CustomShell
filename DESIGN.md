@@ -19,6 +19,8 @@ or change external configuration. Shared tool configuration lives under
   interactive contexts and remains suppressed in embedded or nested sessions.
 - Platform-specific features activate only where supported; Windows
   interoperability helpers are limited to WSL.
+- When `bat` is available, `batx` is the cross-shell shortcut for file output
+  with header and grid decorations but no line numbers.
 - Linux may configure Git credentials, manage a reusable `ssh-agent`, and
   regenerate CustomShell's `environment.d` file. PowerShell startup does not
   change global Git configuration.

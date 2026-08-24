@@ -36,6 +36,7 @@ Append the following line to `~/.bashrc`:
 - `Protect-Tar <source> [archive]` creates an encrypted tar archive.
 - `Unprotect-Tar <archive> <destination>` safely extracts one.
 - PowerShell also provides `Get-SSHConfig` for reading SSH host aliases.
+- `batx <file>` displays files with `bat` without line numbers when `bat` is installed.
 
 PowerShell and Linux use compatible archive formats. Replacement and extraction
 are staged, and unsafe paths and links are rejected.

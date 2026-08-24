@@ -165,7 +165,7 @@ if (
 
 # Batcat
 if (Get-Command bat -ErrorAction SilentlyContinue) {
-    function global:Show-FileWithBat {
+    function global:batx {
         <#
         .SYNOPSIS
         Displays files with bat while omitting line numbers.
@@ -176,6 +176,4 @@ if (Get-Command bat -ErrorAction SilentlyContinue) {
         #>
         bat --style='header,grid' @args
     }
-
-    Set-Alias -Name bat_nonum -Value Show-FileWithBat -Scope Global -Force
 }

@@ -22,5 +22,5 @@ doskey powershell=pwsh_x
 
 :: If bat exists
 where bat >nul 2>&1 && (
-    doskey bat_nonum=bat --style=header,grid $*
+    doskey batx=bat --style=header,grid $*
 )
