@@ -1,66 +1,77 @@
-# === CONFIGURATIONS ===
-# $DebugPreference = "Continue"
-$StartTimeout = 1 # seconds
-$env:PrettyPromptSelection = 'ohmyposh' # 'ohmyposh' | 'starship'
+# Bootstraps the CustomShell PowerShell profile by loading settings, determining
+# the host context, and dot-sourcing each focused startup component in order.
+# It also imports the reusable commands module globally and removes temporary
+# bootstrap variables so repeated profile loads remain predictable.
+[CmdletBinding()]
+param(
+    # Allows tests or alternate profiles to supply a different settings data file.
+    [ValidateNotNullOrEmpty()]
+    [string] $SettingsPath = (Join-Path $PSScriptRoot 'Settings.psd1')
+)
 
-function getParentProcess {
-    $processChain = @()
-    $processId = $PID
-    while ($processId -ne 0) {
-        $proc = Get-CimInstance Win32_Process -Filter "ProcessId=$processId" -ErrorAction SilentlyContinue
-        if (-not $proc) { break }
-        $processChain += $proc.Name
-        $processId = $proc.ParentProcessId
+$customShellSettings = Import-PowerShellDataFile -LiteralPath $SettingsPath
+$global:CustomShellSettings = $customShellSettings
+$customShellStartupRoot = Join-Path $PSScriptRoot 'Startup'
+$customShellProcessNames = @()
+$customShellProcessId = $PID
+
+while ($customShellProcessId -ne 0) {
+    $customShellProcess = Get-CimInstance `
+        -ClassName Win32_Process `
+        -Filter "ProcessId=$customShellProcessId" `
+        -ErrorAction SilentlyContinue
+
+    if (-not $customShellProcess) {
+        break
     }
-    return $processChain
+
+    $customShellProcessNames += $customShellProcess.Name
+    $customShellProcessId = $customShellProcess.ParentProcessId
 }
-$processChain = getParentProcess
-$env:IsBareTerminal = [bool]($processChain | Where-Object {
-        $_ -in @("WindowsTerminal.exe", "cmd.exe")
+
+$customShellState = [pscustomobject]@{
+    IsStandaloneTerminal = [bool] ($customShellProcessNames | Where-Object {
+        $_ -in @('WindowsTerminal.exe', 'cmd.exe')
     })
-# =======================
-
-$elapsed_pretty = Measure-Command { . "$PSScriptRoot/Scripts/pretty/main.ps1" }
-if ($DebugPreference -eq "Continue" -or $elapsed_pretty.TotalSeconds -gt $StartTimeout) {
-    Write-Host "[Pretty] Elapsed time: $($elapsed_pretty.TotalSeconds) seconds"
 }
 
-$elapsed_tools = Measure-Command { . "$PSScriptRoot/Scripts/tools/main.ps1" }
-if ($DebugPreference -eq "Continue" -or $elapsed_tools.TotalSeconds -gt $StartTimeout) {
-    Write-Host "[Tools] Elapsed time: $($elapsed_tools.TotalSeconds) seconds"
-}
+$customShellStartupFiles = @(
+    'Initialize-Environment.ps1'
+    'Set-InteractiveAliases.ps1'
+    'Initialize-Integrations.ps1'
+    'Initialize-PSReadLine.ps1'
+    'Initialize-Prompt.ps1'
+    'Show-StartupStatus.ps1'
+)
 
-function existCheck {
-    # Iterate through an array of command names, checking if the command exists
-    $commandNames = "bat", "conda", "delta", "fd", "fzf", "less", "node", "nvitop", "pipx", "rg", "vim", "zoxide"
-    $missing = $false
-    foreach ($name in $commandNames) {
-        if (!(Get-Command $name -ErrorAction SilentlyContinue)) {
-            $missing = $true
-            Write-Host -ForegroundColor Red -NoNewline "󰬅$name "
-        }
-    }
-    if ($missing) {
-        Write-Host ""
+foreach ($customShellStartupFile in $customShellStartupFiles) {
+    $customShellStartupPath = Join-Path $customShellStartupRoot $customShellStartupFile
+    $customShellElapsed = Measure-Command { . $customShellStartupPath }
+
+    if (
+        $DebugPreference -eq 'Continue' -or
+        $customShellElapsed.TotalSeconds -gt $customShellSettings.StartTimeoutSeconds
+    ) {
+        Write-Host "[CustomShell:$customShellStartupFile] Elapsed time: $($customShellElapsed.TotalSeconds) seconds"
     }
 }
 
+$customShellModulePath = Join-Path `
+    $PSScriptRoot `
+    'Modules/CustomShell.Commands/CustomShell.Commands.psd1'
+Import-Module -Name $customShellModulePath -Global -Force
 
-function manShell {
-    Write-Host -ForegroundColor Blue '󰗉󰗉󰗉  manShell()  󰗉󰗉󰗉'
-    Write-Host -ForegroundColor Green @'
-• conda 󰇙 pipx 󰇙 node
-• z[i] 󰇙 bat[diff] 󰇙 nvitop 󰇙 vim 󰇙 [Un]TarEnc 
-• rg <regex> [--glob ..] [--type <py>] [--no-ignore] [--hidden] [--max-depth ..] 
-    [-l] [-B|A|C <int>] [<path> ...]
-• fd <regex> [--glob ..] [--type d|f] [--no-ignore] [--hidden] [--max|min-depth ..] 
-    [--full-path] [-e <py>] [<targetDir>] [--exec <cmd> {} /;]
-• ssh [-p <port>] [-NT] [-L [<local>:]<port>:<remote>:<port>] [-J <user>@<hop1>] <user>@<hop2>
-• $env:USERPROFILE
-'@
-}
-# Only show startup messages on a bare terminal (e.g. Windows Terminal, cmd), not embedded sessions
-if ($env:IsBareTerminal -eq "True") {
-    existCheck
-    manShell
-}
+Remove-Variable -Name @(
+    'customShellElapsed'
+    'customShellModulePath'
+    'customShellProcess'
+    'customShellProcessId'
+    'customShellProcessNames'
+    'customShellSettings'
+    'customShellState'
+    'customShellStartupFile'
+    'customShellStartupFiles'
+    'customShellStartupPath'
+    'customShellStartupRoot'
+    'SettingsPath'
+) -ErrorAction SilentlyContinue
