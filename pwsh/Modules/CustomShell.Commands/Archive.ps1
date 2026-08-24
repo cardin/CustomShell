@@ -31,7 +31,7 @@ function Move-CustomShellArchiveItem {
         -ErrorAction Stop
 }
 
-function Encode-Tar {
+function Protect-Tar {
     <#
     .SYNOPSIS
     Compresses a folder and encrypts it using OpenSSL.
@@ -54,13 +54,13 @@ function Encode-Tar {
     Replaces the output file if it already exists.
 
     .EXAMPLE
-    Encode-Tar C:\Projects\MyRepo
+    Protect-Tar C:\Projects\MyRepo
 
     .EXAMPLE
-    Encode-Tar C:\Projects\MyRepo D:\Backups\MyRepo.tar.gz.enc
+    Protect-Tar C:\Projects\MyRepo D:\Backups\MyRepo.tar.gz.enc
 
     .EXAMPLE
-    Encode-Tar C:\Projects\MyRepo -Force
+    Protect-Tar C:\Projects\MyRepo -Force
     #>
 
     [CmdletBinding()]
@@ -241,10 +241,10 @@ Restore error: $($_.Exception.Message)
 }
 
 
-function Decode-Tar {
+function Unprotect-Tar {
     <#
     .SYNOPSIS
-    Decrypts and extracts an archive created by Encode-Tar.
+    Decrypts and extracts an archive created by Protect-Tar.
 
     .DESCRIPTION
     Uses OpenSSL to decrypt the archive into a temporary tar.gz file,
@@ -256,17 +256,17 @@ function Decode-Tar {
     OpenSSL prompts for the password.
 
     .PARAMETER Archive
-    Encrypted archive created by Encode-Tar.
+    Encrypted archive created by Protect-Tar.
 
     .PARAMETER Destination
     Destination folder. Defaults to the current directory. Filesystem roots,
     the home directory, and the CustomShell repository root are refused.
 
     .EXAMPLE
-    Decode-Tar C:\Backups\MyRepo.tar.gz.enc
+    Unprotect-Tar C:\Backups\MyRepo.tar.gz.enc
 
     .EXAMPLE
-    Decode-Tar C:\Backups\MyRepo.tar.gz.enc C:\Restored
+    Unprotect-Tar C:\Backups\MyRepo.tar.gz.enc C:\Restored
     #>
 
     [CmdletBinding()]

@@ -35,7 +35,8 @@ Describe 'PowerShell profile startup' {
 `$ErrorActionPreference = 'Stop'
 . '$escapedMainPath' -SettingsPath '$escapedSettingsPath'
 . '$escapedMainPath' -SettingsPath '$escapedSettingsPath'
-Get-Command Encode-Tar -ErrorAction Stop | Out-Null
+Get-Command Protect-Tar -ErrorAction Stop | Out-Null
+Get-Command Unprotect-Tar -ErrorAction Stop | Out-Null
 'PROFILE_OK'
 "@
 

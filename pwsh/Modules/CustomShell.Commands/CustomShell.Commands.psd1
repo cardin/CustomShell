@@ -10,8 +10,8 @@
     PowerShellVersion = '7.0'
     FunctionsToExport = @(
         'Get-SSHConfig'
-        'Decode-Tar'
-        'Encode-Tar'
+        'DdeodeTar'
+        'Encdd-r'
     )
     CmdletsToExport   = @()
     VariablesToExport = @()

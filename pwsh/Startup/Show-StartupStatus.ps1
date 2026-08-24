@@ -41,7 +41,7 @@ function global:Show-CustomShellHelp {
     #>
     Write-Host -ForegroundColor Blue 'CustomShell commands'
     Write-Host -ForegroundColor Green @'
-• Encode-Tar / Decode-Tar
+• Protect-Tar / Unprotect-Tar
 • Get-SSHConfig
 • z / zi / Show-FileWithBat / vim
 • rg <pattern> [path] / fd <pattern> [path]

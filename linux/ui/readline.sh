@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
-# Readline
+
+# Configures case-insensitive, colorized, menu-style Readline completion for
+# interactive Bash sessions.
+
 bind 'set completion-ignore-case on'
 bind 'set colored-stats on'
 bind 'set colored-completion-prefix on'

@@ -1,46 +1,44 @@
 #!/usr/bin/env bash
-export LINUX_SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]}")"
-export PROJ_DIR="$(dirname "$LINUX_SCRIPT_DIR")"
-export IS_WSL=$(uname -r | grep -i "microsoft" >/dev/null && echo true || echo false)
-export PRETTY_PROMPT="ohmyposh" # 'ohmyposh' | 'starship'
-export UTF8_ENABLED=$(
-    [[ $(locale charmap 2>/dev/null) == UTF-8 ]] && echo true || echo false
-)
+# shellcheck disable=SC1090
 
-if [[ ("$USER" == "root" || "$USER" == *-admin) || ("$IS_WSL" = true && "$WT_SESSION" == "") ]]; then
-    export IS_BARE_TERMINAL=true
-else
-    export IS_BARE_TERMINAL=false
-fi
-if [[ "$USER" != "cardin" ]]; then
-    export IS_WORK_DEVICE=true
-else
-    export IS_WORK_DEVICE=false
-fi
+# Public entry point for the Linux and WSL CustomShell configuration. It loads
+# purpose-specific files in dependency order and gates interactive-only setup.
+CUSTOMSHELL_LINUX_DIR="$({ cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P; })"
+export CUSTOMSHELL_LINUX_DIR
+# Compatibility alias for shells or local extensions that used the old name.
+export LINUX_SCRIPT_DIR="$CUSTOMSHELL_LINUX_DIR"
+export PROJ_DIR="$(dirname -- "$CUSTOMSHELL_LINUX_DIR")"
 
-# if ~/.local/bin is not in path, add it
-if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
-    export PATH="$HOME/.local/bin:$PATH"
-fi
-# if /home/linuxbrew exists and is not in path, add it
-if [ -d "/home/linuxbrew" ] && [[ ":$PATH:" != *":/home/linuxbrew/.linuxbrew/bin:"* ]]; then
-    export PATH="/home/linuxbrew/.linuxbrew/bin:$PATH"
+source "$CUSTOMSHELL_LINUX_DIR/core/context.sh"
+source "$CUSTOMSHELL_LINUX_DIR/core/paths.sh"
+
+source "$CUSTOMSHELL_LINUX_DIR/ui/colors.sh"
+source "$CUSTOMSHELL_LINUX_DIR/commands/archive.sh"
+source "$CUSTOMSHELL_LINUX_DIR/commands/certificates.sh"
+source "$CUSTOMSHELL_LINUX_DIR/commands/utilities.sh"
+
+if [[ "$IS_WSL" == true ]]; then
+    source "$CUSTOMSHELL_LINUX_DIR/platform/wsl.sh"
 fi
 
-source "$LINUX_SCRIPT_DIR/pretty/pretty.sh"
-source "$LINUX_SCRIPT_DIR/linux.sh"
-source "$LINUX_SCRIPT_DIR/ssl.sh"
+source "$CUSTOMSHELL_LINUX_DIR/startup/certificates.sh"
+source "$CUSTOMSHELL_LINUX_DIR/startup/desktop.sh"
+source "$CUSTOMSHELL_LINUX_DIR/integrations/tools.sh"
 
-if [ "$IS_WSL" = true ]; then
-    source "$LINUX_SCRIPT_DIR/cmd.sh"
-    source "$LINUX_SCRIPT_DIR/wsl.sh"
+if [[ $- == *i* ]]; then
+    source "$CUSTOMSHELL_LINUX_DIR/integrations/prompt.sh"
+    source "$CUSTOMSHELL_LINUX_DIR/ui/readline.sh"
 fi
 
-# Only show startup messages if not inside tmux
-if [ -z "$TMUX" ]; then
+source "$CUSTOMSHELL_LINUX_DIR/startup/ssh-agent.sh"
+source "$CUSTOMSHELL_LINUX_DIR/startup/git.sh"
+source "$CUSTOMSHELL_LINUX_DIR/startup/environment-d.sh"
+
+source "$CUSTOMSHELL_LINUX_DIR/ui/diagnostics.sh"
+if [[ $- == *i* && -z ${TMUX:-} && ${TERM:-dumb} != dumb && \
+    ${CUSTOMSHELL_SUPPRESS_STARTUP_OUTPUT:-false} != true && \
+    ${CUSTOMSHELL_DIAGNOSTICS_SHOWN:-false} != true ]]; then
     checkInstalled
     manShell
+    export CUSTOMSHELL_DIAGNOSTICS_SHOWN=true
 fi
-
-# generate conf retroactively
-source "$LINUX_SCRIPT_DIR/env.sh"

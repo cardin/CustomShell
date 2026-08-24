@@ -161,6 +161,16 @@ Describe 'protected tar archives' {
         Import-Module -Name $modulePath -Force
     }
 
+    It 'exports only commands with approved PowerShell verbs' {
+        $approvedVerbs = (Get-Verb).Verb
+        $unapprovedCommands = @(
+            Get-Command -Module CustomShell.Commands |
+                Where-Object Verb -NotIn $approvedVerbs
+        )
+
+        $unapprovedCommands.Count | Should Be 0
+    }
+
     BeforeEach {
         $script:testRoot = Join-Path ([IO.Path]::GetTempPath()) "CustomShell.Tests-$([guid]::NewGuid())"
         $script:source = Join-Path $testRoot 'source'
@@ -199,7 +209,7 @@ Describe 'protected tar archives' {
 
         $didThrow = $false
         try {
-            Encode-Tar -Source $source -Output $archive -Force | Out-Null
+            Protect-Tar -Source $source -Output $archive -Force | Out-Null
         }
         catch {
             $didThrow = $true
@@ -212,7 +222,7 @@ Describe 'protected tar archives' {
     It 'replaces an existing archive without leaving replacement files' {
         Set-Content -LiteralPath $archive -Value 'existing archive'
 
-        Encode-Tar -Source $source -Output $archive -Force | Out-Null
+        Protect-Tar -Source $source -Output $archive -Force | Out-Null
 
         (Get-Content -LiteralPath $archive -Raw).Trim() | Should Not Be 'existing archive'
         @(Get-ChildItem -LiteralPath $testRoot -Force -File |
@@ -236,7 +246,7 @@ Describe 'protected tar archives' {
 
         $didThrow = $false
         try {
-            Encode-Tar -Source $source -Output $archive -Force | Out-Null
+            Protect-Tar -Source $source -Output $archive -Force | Out-Null
         }
         catch {
             $didThrow = $true
@@ -256,8 +266,8 @@ Describe 'protected tar archives' {
     It 'round-trips an archive into a new destination' {
         $destination = Join-Path $testRoot 'restored'
 
-        Encode-Tar -Source $source -Output $archive | Out-Null
-        $result = @(Decode-Tar -Archive $archive -Destination $destination)
+        Protect-Tar -Source $source -Output $archive | Out-Null
+        $result = @(Unprotect-Tar -Archive $archive -Destination $destination)
 
         $restoredFile = Join-Path $destination 'source\data.txt'
         (Get-Content -LiteralPath $restoredFile -Raw).Trim() | Should Be 'round trip payload'
@@ -269,11 +279,11 @@ Describe 'protected tar archives' {
         $destination = Join-Path $testRoot 'restored'
         New-Item -ItemType Directory -Path $destination | Out-Null
 
-        Encode-Tar -Source $source -Output $archive | Out-Null
+        Protect-Tar -Source $source -Output $archive | Out-Null
 
         Push-Location $destination
         try {
-            $result = @(Decode-Tar -Archive $archive)
+            $result = @(Unprotect-Tar -Archive $archive)
         }
         finally {
             Pop-Location
@@ -291,8 +301,8 @@ Describe 'protected tar archives' {
         Set-Content -LiteralPath (Join-Path $existingSource 'data.txt') -Value 'old payload'
         Set-Content -LiteralPath (Join-Path $existingSource 'keep.txt') -Value 'keep me'
 
-        Encode-Tar -Source $source -Output $archive | Out-Null
-        Decode-Tar -Archive $archive -Destination $destination | Out-Null
+        Protect-Tar -Source $source -Output $archive | Out-Null
+        Unprotect-Tar -Archive $archive -Destination $destination | Out-Null
 
         (Get-Content -LiteralPath (Join-Path $existingSource 'data.txt') -Raw).Trim() |
             Should Be 'round trip payload'
@@ -306,7 +316,7 @@ Describe 'protected tar archives' {
         New-Item -ItemType Directory -Path $existingSource | Out-Null
         Set-Content -LiteralPath (Join-Path $existingSource 'data.txt') -Value 'existing payload'
         Set-Content -LiteralPath (Join-Path $existingSource 'keep.txt') -Value 'keep me'
-        Encode-Tar -Source $source -Output $archive | Out-Null
+        Protect-Tar -Source $source -Output $archive | Out-Null
         $global:CustomShellPublishFailed = $false
 
         Mock Move-CustomShellArchiveItem {
@@ -328,7 +338,7 @@ Describe 'protected tar archives' {
 
         $didThrow = $false
         try {
-            Decode-Tar -Archive $archive -Destination $destination | Out-Null
+            Unprotect-Tar -Archive $archive -Destination $destination | Out-Null
         }
         catch {
             $didThrow = $true
@@ -349,7 +359,7 @@ Describe 'protected tar archives' {
 
         $didThrow = $false
         try {
-            Decode-Tar -Archive $archive -Destination $destination | Out-Null
+            Unprotect-Tar -Archive $archive -Destination $destination | Out-Null
         }
         catch {
             $didThrow = $true
@@ -370,7 +380,7 @@ Describe 'protected tar archives' {
 
         $didThrow = $false
         try {
-            Decode-Tar -Archive $archive -Destination $destination | Out-Null
+            Unprotect-Tar -Archive $archive -Destination $destination | Out-Null
         }
         catch {
             $didThrow = $true
@@ -391,7 +401,7 @@ Describe 'protected tar archives' {
 
         $didThrow = $false
         try {
-            Decode-Tar -Archive $archive -Destination $destination | Out-Null
+            Unprotect-Tar -Archive $archive -Destination $destination | Out-Null
         }
         catch {
             $didThrow = $true
@@ -403,12 +413,12 @@ Describe 'protected tar archives' {
     }
 
     It 'refuses a filesystem root as the extraction destination' {
-        Encode-Tar -Source $source -Output $archive | Out-Null
+        Protect-Tar -Source $source -Output $archive | Out-Null
         $rootPath = [IO.Path]::GetPathRoot($testRoot)
 
         $didThrow = $false
         try {
-            Decode-Tar -Archive $archive -Destination $rootPath | Out-Null
+            Unprotect-Tar -Archive $archive -Destination $rootPath | Out-Null
         }
         catch {
             $didThrow = $true

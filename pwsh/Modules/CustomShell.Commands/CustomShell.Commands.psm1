@@ -6,6 +6,6 @@
 
 Export-ModuleMember -Function @(
     'Get-SSHConfig'
-    'Decode-Tar'
-    'Encode-Tar'
+    'Protect-Tar'
+    'Unprotect-Tar'
 )
