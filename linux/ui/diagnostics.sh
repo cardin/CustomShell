@@ -45,18 +45,17 @@ manShell() {
         return
     fi
 
-    echo -e "$Blue󰗉󰗉󰗉  manShell ()  󰗉󰗉󰗉"
+    echo -e "$Blue󰗉󰗉󰗉 manShell 󰗉󰗉󰗉"
 
     if [[ "$IS_WSL" == true ]]; then
-        echo -e "$Green•  wcd ~ 󰇙 wpushd 󰇙 cmd 󰇙 dos2unix 󰇙 release-ram 󰇙 mirror-win-ssh 󰇙 \$USERPROFILE"
+        echo -e "$Green•  wcd ~ / wpushd / cmd / dos2unix / release-ram / mirror-win-ssh / \$USERPROFILE"
     else
         echo -e "$Green• lazydocker 󰇙 lazygit 󰇙 nvitop"
     fi
-    echo -e "$Green• list_cert_chain
-• conda 󰇙 pipx 󰇙 node
-• z[i] 󰇙 bat 󰇙 tree [-L] 󰇙 [Un]Protect-Tar
-• btop 󰇙 progress [-w -m]
-• df -hl .. 󰇙 du -hl [--max-depth <int>] ..
+    echo -e "$Green• conda / pipx / node
+• z[i] / bat / tree [-L] / [Un]Protect-Tar / list_cert_chain
+• btop / progress [-w -m]
+• df -hl .. / du -hl [--max-depth <int>] ..
 • rg <regex> [--glob ..] [--type <py>] [--no-ignore] [--hidden] [--max-depth ..] \n\
     [-l] [-B|A|C <int>] [<path> ...]
 • fd <regex> [--glob ..] [--type d|f] [--no-ignore] [--hidden] [--max|min-depth ..] \n\

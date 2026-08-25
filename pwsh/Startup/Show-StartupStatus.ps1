@@ -21,8 +21,8 @@ function global:Show-MissingShellCommand {
     )
 
     $missingCommands = @($CommandName | Where-Object {
-        -not (Get-Command $_ -ErrorAction SilentlyContinue)
-    })
+            -not (Get-Command $_ -ErrorAction SilentlyContinue)
+        })
 
     if ($missingCommands.Count -gt 0) {
         Write-Host -ForegroundColor Red "Missing commands: $($missingCommands -join ', ')"
@@ -39,13 +39,16 @@ function global:Show-CustomShellHelp {
     search, and file-viewing helpers. It performs no command discovery or
     configuration changes.
     #>
-    Write-Host -ForegroundColor Blue 'CustomShell commands'
+    Write-Host -ForegroundColor Blue '=== Show-CustomShellHelp ==='
     Write-Host -ForegroundColor Green @'
-• Protect-Tar / Unprotect-Tar
-• Get-SSHConfig
-• z / zi / batx / vim
-• rg <pattern> [path] / fd <pattern> [path]
-• ssh [-p <port>] [-J <jump-host>] <host>
+• conda / pipx / node
+• z / zi / batx / nvitop / Get-SSHConfig / [Un]protect-Tar
+• rg <regex> [--glob ..] [-t <py>] [--no-ignore] [--hidden] [--max-depth ..] 
+    [-l] [-B|A|C <int>] [<path> ...]
+• fd <regex> [--glob ..] [-t d|f] [--no-ignore] [--hidden] [--max|min-depth ..] 
+    [--full-path] [-e <py>] [<targetDir>] [--exec <cmd> {} /;]
+• ssh [-p <port>] [-NT] [-L [<local>:]<port>:<remote>:<port>] [-J <user>@<hop1>] <user>@<hop2>
+• $env:USERPROFILE
 '@
 }
 
