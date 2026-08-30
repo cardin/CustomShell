@@ -17,6 +17,8 @@ or change external configuration. Shared tool configuration lives under
   code must be successful and non-empty before execution.
 - Repeated sourcing must be safe. Startup output belongs only in appropriate
   interactive contexts and remains suppressed in embedded or nested sessions.
+- Prompt engines initialize before zoxide so its directory-tracking hook wraps
+  the final prompt function and remains active.
 - Platform-specific features activate only where supported; Windows
   interoperability helpers are limited to WSL.
 - When `bat` is available, `batx` is the cross-shell shortcut for file output

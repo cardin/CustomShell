@@ -52,13 +52,6 @@ if (Get-Command fnm -ErrorAction SilentlyContinue) {
     }
 }
 
-if (Get-Command zoxide -ErrorAction SilentlyContinue) {
-    $zoxideInitialization = zoxide init powershell 2>$null | Out-String
-    if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($zoxideInitialization)) {
-        Invoke-Expression $zoxideInitialization
-    }
-}
-
 if ($env:TERM_PROGRAM -eq 'vscode' -and (Get-Command code -ErrorAction SilentlyContinue)) {
     $vscodeIntegrationPath = code --locate-shell-integration-path pwsh 2>$null | Select-Object -First 1
     if ($LASTEXITCODE -eq 0 -and (Test-Path -LiteralPath $vscodeIntegrationPath -PathType Leaf)) {

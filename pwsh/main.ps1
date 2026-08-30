@@ -41,6 +41,7 @@ $customShellStartupFiles = @(
     'Initialize-Integrations.ps1'
     'Initialize-PSReadLine.ps1'
     'Initialize-Prompt.ps1'
+    'Initialize-Zoxide.ps1'
     'Show-StartupStatus.ps1'
 )
 
