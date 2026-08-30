@@ -21,6 +21,8 @@ or change external configuration. Shared tool configuration lives under
   interoperability helpers are limited to WSL.
 - When `bat` is available, `batx` is the cross-shell shortcut for file output
   with header and grid decorations but no line numbers.
+- `Protect-Tar -h` and `Unprotect-Tar -h` display command usage and archive
+  safety details without checking dependencies or changing the filesystem.
 - Linux may configure Git credentials, manage a reusable `ssh-agent`, and
   regenerate CustomShell's `environment.d` file. PowerShell startup does not
   change global Git configuration.
@@ -30,6 +32,8 @@ or change external configuration. Shared tool configuration lives under
 - Public command names, startup paths, archive formats, and cryptographic
   parameters are compatibility surfaces. PowerShell and Linux archives use
   AES-256-CBC with PBKDF2, salt, and 600,000 iterations.
+- `Show-Help` is the cross-shell command-reference entry point. It replaces
+  PowerShell's `Show-CustomShellHelp` and Bash's `manShell`.
 - Destructive operations must resolve narrow targets and reject broad or empty
   paths. Archive extraction must reject traversal and link entries.
 - Replacement and extraction are transactional: failures preserve existing

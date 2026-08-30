@@ -24,6 +24,16 @@ declare -F untar_gpg >/dev/null && fail "untar_gpg should have been removed"
 declare -F tar_enc >/dev/null && fail "tar_enc should have been renamed"
 declare -F untar_enc >/dev/null && fail "untar_enc should have been renamed"
 
+protect_help="$(Protect-Tar -h)" || fail "Protect-Tar -h failed"
+[[ "$protect_help" == *"USAGE"* ]] || fail "Protect-Tar help has no usage section"
+[[ "$protect_help" == *"600,000 iterations"* ]] ||
+    fail "Protect-Tar help has no encryption details"
+
+unprotect_help="$(Unprotect-Tar -h)" || fail "Unprotect-Tar -h failed"
+[[ "$unprotect_help" == *"USAGE"* ]] || fail "Unprotect-Tar help has no usage section"
+[[ "$unprotect_help" == *"transactional"* ]] ||
+    fail "Unprotect-Tar help has no extraction details"
+
 mkdir -p "$test_root/bin" "$test_root/source"
 echo "archive test" >"$test_root/source/content.txt"
 

@@ -171,6 +171,22 @@ Describe 'protected tar archives' {
         $unapprovedCommands.Count | Should Be 0
     }
 
+    It 'shows Protect-Tar help with -h without requiring a source' {
+        $helpText = Protect-Tar -h | Out-String
+
+        $helpText | Should Match 'USAGE'
+        $helpText | Should Match 'Protect-Tar <source_directory>'
+        $helpText | Should Match '600,000 iterations'
+    }
+
+    It 'shows Unprotect-Tar help with -h without requiring an archive' {
+        $helpText = Unprotect-Tar -h | Out-String
+
+        $helpText | Should Match 'USAGE'
+        $helpText | Should Match 'Unprotect-Tar <archive.tar.gz.enc>'
+        $helpText | Should Match 'transactional extraction'
+    }
+
     BeforeEach {
         $script:testRoot = Join-Path ([IO.Path]::GetTempPath()) "CustomShell.Tests-$([guid]::NewGuid())"
         $script:source = Join-Path $testRoot 'source'

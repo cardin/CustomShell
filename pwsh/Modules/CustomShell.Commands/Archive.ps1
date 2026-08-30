@@ -53,6 +53,9 @@ function Protect-Tar {
     .PARAMETER Force
     Replaces the output file if it already exists.
 
+    .PARAMETER Help
+    Displays command usage and archive details without creating an archive.
+
     .EXAMPLE
     Protect-Tar C:\Projects\MyRepo
 
@@ -63,18 +66,55 @@ function Protect-Tar {
     Protect-Tar C:\Projects\MyRepo -Force
     #>
 
-    [CmdletBinding()]
+    [CmdletBinding(DefaultParameterSetName = 'Archive')]
     param(
-        [Parameter(Mandatory, Position = 0)]
+        [Parameter(Mandatory, Position = 0, ParameterSetName = 'Archive')]
         [ValidateNotNullOrEmpty()]
         [string] $Source,
 
-        [Parameter(Position = 1)]
+        [Parameter(Position = 1, ParameterSetName = 'Archive')]
         [ValidateNotNullOrEmpty()]
         [string] $Output,
 
-        [switch] $Force
+        [Parameter(ParameterSetName = 'Archive')]
+        [switch] $Force,
+
+        [Parameter(Mandatory, ParameterSetName = 'Help')]
+        [Alias('h')]
+        [switch] $Help
     )
+
+    if ($Help) {
+        @'
+Protect-Tar
+    Compresses a directory and encrypts it as an OpenSSL-compatible archive.
+
+USAGE
+    Protect-Tar <source_directory> [output_file.tar.gz.enc] [-Force]
+    Protect-Tar -Source <source_directory> [-Output <file>] [-Force]
+    Protect-Tar -h
+
+PARAMETERS
+    source_directory / -Source
+        Directory to archive.
+
+    output_file / -Output
+        Encrypted output file. By default, a timestamped .tar.gz.enc file is
+        created beside the source directory.
+
+    -Force
+        Replaces an existing output file after encryption succeeds.
+
+    -h / -Help
+        Displays this help.
+
+NOTES
+    Requires tar.exe and OpenSSL. OpenSSL prompts for the password and its
+    confirmation. Encryption uses AES-256-CBC.
+    PBKDF2 uses 600,000 iterations.
+'@
+        return
+    }
 
     $openssl = Get-Command openssl -ErrorAction SilentlyContinue
 
@@ -262,6 +302,9 @@ function Unprotect-Tar {
     Destination folder. Defaults to the current directory. Filesystem roots,
     the home directory, and the CustomShell repository root are refused.
 
+    .PARAMETER Help
+    Displays command usage and archive details without extracting an archive.
+
     .EXAMPLE
     Unprotect-Tar C:\Backups\MyRepo.tar.gz.enc
 
@@ -269,16 +312,49 @@ function Unprotect-Tar {
     Unprotect-Tar C:\Backups\MyRepo.tar.gz.enc C:\Restored
     #>
 
-    [CmdletBinding()]
+    [CmdletBinding(DefaultParameterSetName = 'Extract')]
     param(
-        [Parameter(Mandatory, Position = 0)]
+        [Parameter(Mandatory, Position = 0, ParameterSetName = 'Extract')]
         [ValidateNotNullOrEmpty()]
         [string] $Archive,
 
-        [Parameter(Position = 1)]
+        [Parameter(Position = 1, ParameterSetName = 'Extract')]
         [ValidateNotNullOrEmpty()]
-        [string] $Destination = '.'
+        [string] $Destination = '.',
+
+        [Parameter(Mandatory, ParameterSetName = 'Help')]
+        [Alias('h')]
+        [switch] $Help
     )
+
+    if ($Help) {
+        @'
+Unprotect-Tar
+    Decrypts and safely extracts an archive created by Protect-Tar.
+
+USAGE
+    Unprotect-Tar <archive.tar.gz.enc> [destination_directory]
+    Unprotect-Tar -Archive <file> [-Destination <directory>]
+    Unprotect-Tar -h
+
+PARAMETERS
+    archive / -Archive
+        Encrypted archive created by Protect-Tar.
+
+    destination_directory / -Destination
+        Directory into which the archive is extracted. Defaults to the current
+        directory. Filesystem roots, the home directory, and the CustomShell
+        repository root are refused.
+
+    -h / -Help
+        Displays this help.
+
+NOTES
+    Requires tar.exe and OpenSSL. OpenSSL prompts for the password. Archive
+    paths and link entries are validated before transactional extraction.
+'@
+        return
+    }
 
     $openssl = Get-Command openssl -ErrorAction SilentlyContinue
 

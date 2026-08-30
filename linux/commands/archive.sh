@@ -7,6 +7,35 @@
 # Compresses a source directory and encrypts it with OpenSSL.
 function Protect-Tar {
     (
+        if [[ $# -eq 1 && ( "$1" == -h || "$1" == --help ) ]]; then
+            cat <<'EOF'
+Protect-Tar
+    Compresses a directory and encrypts it as an OpenSSL-compatible archive.
+
+USAGE
+    Protect-Tar <source_directory> [output_file.tar.gz.enc]
+    Protect-Tar -h
+
+ARGUMENTS
+    source_directory
+        Directory to archive.
+
+    output_file
+        Encrypted output file. By default, a timestamped .tar.gz.enc file is
+        created beside the source directory. An existing file is replaced only
+        after encryption succeeds.
+
+OPTIONS
+    -h, --help
+        Displays this help.
+
+NOTES
+    Requires tar, realpath, and OpenSSL. The command prompts for a password.
+    Encryption uses AES-256-CBC with PBKDF2 and 600,000 iterations.
+EOF
+            return 0
+        fi
+
         if [[ $# -lt 1 || $# -gt 2 ]]; then
             echo "Usage: Protect-Tar <source_directory> [output_file.tar.gz.enc]"
             return 1
@@ -88,6 +117,35 @@ function Protect-Tar {
 # Decrypts an OpenSSL archive and extracts it into a destination directory.
 function Unprotect-Tar {
     (
+        if [[ $# -eq 1 && ( "$1" == -h || "$1" == --help ) ]]; then
+            cat <<'EOF'
+Unprotect-Tar
+    Decrypts and safely extracts an archive created by Protect-Tar.
+
+USAGE
+    Unprotect-Tar <archive.tar.gz.enc> <destination_directory>
+    Unprotect-Tar -h
+
+ARGUMENTS
+    archive
+        Encrypted archive created by Protect-Tar.
+
+    destination_directory
+        Directory into which the archive is extracted. Filesystem roots, the
+        home directory, and the CustomShell repository root are refused.
+
+OPTIONS
+    -h, --help
+        Displays this help.
+
+NOTES
+    Requires tar, realpath, and OpenSSL. The command prompts for a password.
+    Archive paths and link entries are validated before transactional
+    extraction.
+EOF
+            return 0
+        fi
+
         if [[ $# -ne 2 ]]; then
             echo "Usage: Unprotect-Tar <archive.tar.gz.enc> <destination_directory>"
             return 1

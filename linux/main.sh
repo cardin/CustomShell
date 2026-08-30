@@ -39,6 +39,6 @@ if [[ $- == *i* && -z ${TMUX:-} && ${TERM:-dumb} != dumb && \
     ${CUSTOMSHELL_SUPPRESS_STARTUP_OUTPUT:-false} != true && \
     ${CUSTOMSHELL_DIAGNOSTICS_SHOWN:-false} != true ]]; then
     checkInstalled
-    manShell
+    Show-Help
     export CUSTOMSHELL_DIAGNOSTICS_SHOWN=true
 fi

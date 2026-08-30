@@ -32,9 +32,9 @@ checkInstalled() {
     fi
 }
 
-# manShell
+# Show-Help
 # Displays a short reference for commonly used CustomShell and CLI commands.
-manShell() {
+Show-Help() {
     if [[ ${UTF8_ENABLED:-false} != true || ${IS_BARE_TERMINAL:-false} == true ]]; then
         echo -e "${Blue}CustomShell commands${Color_Off}"
         if [[ "$IS_WSL" == true ]]; then
@@ -45,7 +45,7 @@ manShell() {
         return
     fi
 
-    echo -e "$Blue󰗉󰗉󰗉 manShell 󰗉󰗉󰗉"
+    echo -e "$Blue󰗉󰗉󰗉 Show-Help 󰗉󰗉󰗉"
 
     if [[ "$IS_WSL" == true ]]; then
         echo -e "$Green•  wcd ~ / wpushd / cmd / dos2unix / release-ram / mirror-win-ssh / \$USERPROFILE"

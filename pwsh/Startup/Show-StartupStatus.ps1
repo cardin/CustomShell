@@ -29,7 +29,7 @@ function global:Show-MissingShellCommand {
     }
 }
 
-function global:Show-CustomShellHelp {
+function global:Show-Help {
     <#
     .SYNOPSIS
     Displays a compact reminder of useful CustomShell commands.
@@ -39,7 +39,7 @@ function global:Show-CustomShellHelp {
     search, and file-viewing helpers. It performs no command discovery or
     configuration changes.
     #>
-    Write-Host -ForegroundColor Blue '=== Show-CustomShellHelp ==='
+    Write-Host -ForegroundColor Blue '=== Show-Help ==='
     Write-Host -ForegroundColor Green @'
 • conda / pipx / node
 • z / zi / batx / nvitop / Get-SSHConfig / [Un]protect-Tar
@@ -54,5 +54,5 @@ function global:Show-CustomShellHelp {
 
 if ($customShellState.IsStandaloneTerminal) {
     Show-MissingShellCommand
-    Show-CustomShellHelp
+    Show-Help
 }

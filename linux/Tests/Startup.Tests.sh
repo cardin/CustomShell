@@ -37,6 +37,7 @@ HOME="$test_root/home" USER=cardin PATH="$test_root/bin:$PATH" \
         declare -F Protect-Tar >/dev/null
         declare -F Unprotect-Tar >/dev/null
         declare -F list_cert_chain >/dev/null
+        declare -F Show-Help >/dev/null
         [[ "$GTK_OVERLAY_SCROLLING" == 0 ]]
         [[ -f "$HOME/.config/environment.d/90-customshell.conf" ]]
         [[ "$(stat -c %i "$HOME/.config/environment.d/90-customshell.conf")" == "$env_inode" ]]

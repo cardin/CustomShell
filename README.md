@@ -33,8 +33,10 @@ Append the following line to `~/.bashrc`:
 
 ## Commands
 
+- `Show-Help` displays the compact CustomShell command reference in both shells.
 - `Protect-Tar <source> [archive]` creates an encrypted tar archive.
 - `Unprotect-Tar <archive> <destination>` safely extracts one.
+- Pass `-h` to either archive command to display its usage and safety details.
 - PowerShell also provides `Get-SSHConfig` for reading SSH host aliases.
 - `batx <file>` displays files with `bat` without line numbers when `bat` is installed.
 
