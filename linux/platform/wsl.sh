@@ -8,6 +8,12 @@ if [[ -z ${USERPROFILE+x} ]]; then
     echo -e "${Blue}Ignore this error if you're using \"su -\". Next time, use \"su root\"."
 fi
 
+# Use VS Code (Windows) as the default editor inside WSL so it opens in the
+# Windows-side GUI. Only set here because this file is sourced only on WSL.
+if command -v code >/dev/null 2>&1; then
+    export EDITOR="${EDITOR:-code --wait}"
+fi
+
 # wcd
 # Changes directory using a Windows-style path converted by wslpath.
 wcd() {

@@ -17,12 +17,13 @@ fail() {
 
 mkdir -p "$test_root/bin" "$test_root/home/.ssh" "$test_root/windows/.ssh"
 printf '#!/usr/bin/env bash\nexit 0\n' >"$test_root/bin/cmd.exe"
+printf '#!/usr/bin/env bash\nexit 0\n' >"$test_root/bin/code"
 cat >"$test_root/bin/rsync" <<'EOF'
 #!/usr/bin/env bash
 [[ ${RSYNC_FAIL:-false} == true ]] && exit 1
 cp -a -- "$2/." "$3/"
 EOF
-chmod +x "$test_root/bin/cmd.exe" "$test_root/bin/rsync"
+chmod +x "$test_root/bin/code" "$test_root/bin/cmd.exe" "$test_root/bin/rsync"
 
 echo "old" >"$test_root/home/.ssh/old-key"
 echo "new" >"$test_root/windows/.ssh/new-key"
@@ -30,8 +31,13 @@ echo "new" >"$test_root/windows/.ssh/new-key"
 Blue="" HOME="$test_root/home" USERPROFILE="$test_root/windows" \
     PATH="$test_root/bin:$PATH"
 export Blue HOME USERPROFILE PATH
+unset EDITOR
 source "$(dirname "${BASH_SOURCE[0]}")/../platform/wsl.sh"
+[[ "${EDITOR:-}" == "code --wait" ]] || fail "EDITOR was not defaulted to code --wait"
 
+export EDITOR="vim"
+source "$(dirname "${BASH_SOURCE[0]}")/../platform/wsl.sh"
+[[ "${EDITOR:-}" == "vim" ]] || fail "existing EDITOR was overwritten"
 mirror-win-ssh >/dev/null || fail "mirror-win-ssh failed"
 [[ -f "$HOME/.ssh/new-key" ]] || fail "new SSH content was not published"
 [[ ! -e "$HOME/.ssh/old-key" ]] || fail "stale SSH content was not removed"
