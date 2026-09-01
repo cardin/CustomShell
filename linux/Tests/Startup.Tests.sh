@@ -29,7 +29,7 @@ chmod +x "$test_root/bin/git" "$test_root/bin/ssh-add" "$test_root/bin/ssh-agent
 chmod +x "$test_root/home/.local/share/fnm/fnm"
 
 main_script="$(dirname "${BASH_SOURCE[0]}")/../main.sh"
-HOME="$test_root/home" USER=cardin PATH="$test_root/bin:$PATH" \
+HOME="$test_root/home" USER=cardi-test PATH="$test_root/bin:$PATH" \
     bash -u -c '
         source "$1"
         env_inode=$(stat -c %i "$HOME/.config/environment.d/90-customshell.conf")
@@ -38,6 +38,7 @@ HOME="$test_root/home" USER=cardin PATH="$test_root/bin:$PATH" \
         declare -F Unprotect-Tar >/dev/null
         declare -F list_cert_chain >/dev/null
         declare -F Show-Help >/dev/null
+        [[ "$IS_WORK_DEVICE" == false ]]
         [[ "$GTK_OVERLAY_SCROLLING" == 0 ]]
         [[ -f "$HOME/.config/environment.d/90-customshell.conf" ]]
         [[ "$(stat -c %i "$HOME/.config/environment.d/90-customshell.conf")" == "$env_inode" ]]

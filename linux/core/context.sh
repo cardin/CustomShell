@@ -16,10 +16,10 @@ fi
 
 # Retained for compatibility. Device detection should eventually use an
 # explicit setting instead of this username heuristic.
-if [[ "$customshell_user" != cardin ]]; then
-    export IS_WORK_DEVICE=true
-else
+if [[ "$customshell_user" == cardi* ]]; then
     export IS_WORK_DEVICE=false
+else
+    export IS_WORK_DEVICE=true
 fi
 
 unset customshell_user
