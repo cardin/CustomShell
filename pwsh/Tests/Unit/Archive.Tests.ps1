@@ -235,6 +235,26 @@ Describe 'protected tar archives' {
         (Get-Content -LiteralPath $archive -Raw).Trim() | Should Be 'existing archive'
     }
 
+    It 'reports helpful details when tar.exe fails due to symlink or stat errors' {
+        $mockTarPath = Join-Path $mockBin 'tar.cmd'
+        @'
+@echo off
+echo tar.exe: test/path: Cannot stat: Invalid argument 1>&2
+exit /b 1
+'@ | Set-Content -LiteralPath $mockTarPath -Encoding Ascii
+
+        $exceptionMessage = $null
+        try {
+            Protect-Tar -Source $source -Output $archive -Force | Out-Null
+        }
+        catch {
+            $exceptionMessage = $_.Exception.Message
+        }
+
+        $exceptionMessage | Should Match 'symbolic links or WSL reparse points'
+        $exceptionMessage | Should Match 'Cannot stat: Invalid argument'
+    }
+
     It 'replaces an existing archive without leaving replacement files' {
         Set-Content -LiteralPath $archive -Value 'existing archive'
 

@@ -192,12 +192,48 @@ You can verify it with:
     try {
         Write-Verbose "Creating temporary archive: $temporaryTar"
 
-        & $tar.Source `
+        $tarOutput = & $tar.Source `
             -czf $temporaryTar `
             -C $sourceItem.Parent.FullName `
-            $sourceItem.Name
+            $sourceItem.Name 2>&1
 
         if ($LASTEXITCODE -ne 0) {
+            $tarText = ($tarOutput | ForEach-Object { $_.ToString() }) -join "`n"
+            $reparseItems = @(Get-ChildItem -LiteralPath $sourceItem.FullName -Recurse -Force -ErrorAction SilentlyContinue |
+                Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint })
+
+            if ($tarText -match 'Cannot stat' -or $tarText -match 'symlink' -or $reparseItems.Count -gt 0) {
+                $symlinkDetails = if ($reparseItems.Count -gt 0) {
+                    $samplePaths = ($reparseItems | Select-Object -First 3 | ForEach-Object { "  - $($_.FullName)" }) -join "`n"
+                    "Found $($reparseItems.Count) symbolic link(s) or reparse point(s), including:`n$samplePaths"
+                }
+                else {
+                    "tar.exe error output indicated symbolic link or stat issue(s)."
+                }
+
+                $outputMessage = if (-not [string]::IsNullOrWhiteSpace($tarText)) {
+                    "`n`ntar.exe output:`n$tarText"
+                }
+                else {
+                    ""
+                }
+
+                throw @"
+tar.exe failed because symbolic links or WSL reparse points in '$($sourceItem.FullName)' could not be processed by native tar.exe.
+
+$symlinkDetails$outputMessage
+
+To resolve this issue:
+- Remove or resolve symbolic links in Windows before archiving.
+- Exclude build directories or virtual environments containing symlinks (e.g. .venv, node_modules).
+- Run Protect-Tar from inside WSL (Linux) if symbolic links must be preserved.
+"@
+            }
+
+            if (-not [string]::IsNullOrWhiteSpace($tarText)) {
+                throw "tar.exe failed with exit code ${LASTEXITCODE}:`n$tarText"
+            }
+
             throw "tar.exe failed with exit code $LASTEXITCODE."
         }
 
@@ -488,11 +524,15 @@ archive may have been created with different OpenSSL options.
 
         Write-Verbose "Extracting archive into staging directory: $stagingDirectory"
 
-        & $tar.Source `
+        $tarExtractOutput = & $tar.Source `
             -xzf $temporaryTar `
-            -C $stagingDirectory
+            -C $stagingDirectory 2>&1
 
         if ($LASTEXITCODE -ne 0) {
+            $tarExtractText = ($tarExtractOutput | ForEach-Object { $_.ToString() }) -join "`n"
+            if (-not [string]::IsNullOrWhiteSpace($tarExtractText)) {
+                throw "tar.exe extraction failed with exit code ${LASTEXITCODE}:`n$tarExtractText"
+            }
             throw "tar.exe extraction failed with exit code $LASTEXITCODE."
         }
 
