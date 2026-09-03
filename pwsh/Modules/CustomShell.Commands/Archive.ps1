@@ -50,6 +50,10 @@ function Protect-Tar {
     Encrypted output file. Defaults to <folder>_<yyyyMMdd_HHmmss>.tar.gz.enc
     beside the source folder.
 
+    .PARAMETER Exclude
+    Glob pattern(s) to omit from the archive, passed through to tar's
+    --exclude option. Repeatable.
+
     .PARAMETER Force
     Replaces the output file if it already exists.
 
@@ -64,6 +68,9 @@ function Protect-Tar {
 
     .EXAMPLE
     Protect-Tar C:\Projects\MyRepo -Force
+
+    .EXAMPLE
+    Protect-Tar C:\Projects\MyRepo -Exclude 'node_modules', '*.log'
     #>
 
     [CmdletBinding(DefaultParameterSetName = 'Archive')]
@@ -75,6 +82,9 @@ function Protect-Tar {
         [Parameter(Position = 1, ParameterSetName = 'Archive')]
         [ValidateNotNullOrEmpty()]
         [string] $Output,
+
+        [Parameter(ParameterSetName = 'Archive')]
+        [string[]] $Exclude,
 
         [Parameter(ParameterSetName = 'Archive')]
         [switch] $Force,
@@ -90,8 +100,8 @@ Protect-Tar
     Compresses a directory and encrypts it as an OpenSSL-compatible archive.
 
 USAGE
-    Protect-Tar <source_directory> [output_file.tar.gz.enc] [-Force]
-    Protect-Tar -Source <source_directory> [-Output <file>] [-Force]
+    Protect-Tar <source_directory> [output_file.tar.gz.enc] [-Force] [-Exclude <pattern>...]
+    Protect-Tar -Source <source_directory> [-Output <file>] [-Force] [-Exclude <pattern>...]
     Protect-Tar -h
 
 PARAMETERS
@@ -101,6 +111,10 @@ PARAMETERS
     output_file / -Output
         Encrypted output file. By default, a timestamped .tar.gz.enc file is
         created beside the source directory.
+
+    -Exclude <pattern>
+        Glob pattern to omit from the archive, passed through to tar's
+        --exclude option. Repeatable.
 
     -Force
         Replaces an existing output file after encryption succeeds.
@@ -192,8 +206,15 @@ You can verify it with:
     try {
         Write-Verbose "Creating temporary archive: $temporaryTar"
 
+        $excludeArgs = @(
+            foreach ($pattern in $Exclude) {
+                "--exclude=$pattern"
+            }
+        )
+
         $tarOutput = & $tar.Source `
             -czf $temporaryTar `
+            @excludeArgs `
             -C $sourceItem.Parent.FullName `
             $sourceItem.Name 2>&1
 

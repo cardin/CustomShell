@@ -7,13 +7,19 @@
 # Compresses a source directory and encrypts it with OpenSSL.
 function Protect-Tar {
     (
-        if [[ $# -eq 1 && ( "$1" == -h || "$1" == --help ) ]]; then
-            cat <<'EOF'
+        local -a excludes=() positional=()
+        local argument pattern
+
+        while [[ $# -gt 0 ]]; do
+            argument="$1"
+            case "$argument" in
+                -h | --help)
+                    cat <<'EOF'
 Protect-Tar
     Compresses a directory and encrypts it as an OpenSSL-compatible archive.
 
 USAGE
-    Protect-Tar <source_directory> [output_file.tar.gz.enc]
+    Protect-Tar <source_directory> [output_file.tar.gz.enc] [--exclude PATTERN]...
     Protect-Tar -h
 
 ARGUMENTS
@@ -26,6 +32,10 @@ ARGUMENTS
         after encryption succeeds.
 
 OPTIONS
+    --exclude PATTERN
+        Glob pattern to omit from the archive, passed through to tar's
+        --exclude option. Repeatable.
+
     -h, --help
         Displays this help.
 
@@ -33,11 +43,45 @@ NOTES
     Requires tar, realpath, and OpenSSL. The command prompts for a password.
     Encryption uses AES-256-CBC with PBKDF2 and 600,000 iterations.
 EOF
-            return 0
-        fi
+                    return 0
+                    ;;
+                --exclude)
+                    if [[ $# -lt 2 || -z "$2" ]]; then
+                        echo "Error: --exclude requires a pattern."
+                        return 1
+                    fi
+                    excludes+=("$2")
+                    shift 2
+                    ;;
+                --exclude=*)
+                    pattern="${argument#--exclude=}"
+                    if [[ -z "$pattern" ]]; then
+                        echo "Error: --exclude requires a pattern."
+                        return 1
+                    fi
+                    excludes+=("$pattern")
+                    shift
+                    ;;
+                --)
+                    shift
+                    positional+=("$@")
+                    break
+                    ;;
+                -*)
+                    echo "Error: Unknown option: $argument"
+                    return 1
+                    ;;
+                *)
+                    positional+=("$argument")
+                    shift
+                    ;;
+            esac
+        done
+
+        set -- "${positional[@]}"
 
         if [[ $# -lt 1 || $# -gt 2 ]]; then
-            echo "Usage: Protect-Tar <source_directory> [output_file.tar.gz.enc]"
+            echo "Usage: Protect-Tar <source_directory> [output_file.tar.gz.enc] [--exclude PATTERN]..."
             return 1
         fi
 
@@ -91,7 +135,13 @@ EOF
         fi
         echo
 
-        if ! tar -czf "$tmp_tar" -C "$(dirname -- "$src")" "$(basename -- "$src")"; then
+        local -a exclude_args=()
+        local exclude_pattern
+        for exclude_pattern in "${excludes[@]}"; do
+            exclude_args+=("--exclude=$exclude_pattern")
+        done
+
+        if ! tar -czf "$tmp_tar" "${exclude_args[@]}" -C "$(dirname -- "$src")" "$(basename -- "$src")"; then
             echo "Error: Failed to create archive."
             return 1
         fi

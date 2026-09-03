@@ -177,6 +177,7 @@ Describe 'protected tar archives' {
         $helpText | Should Match 'USAGE'
         $helpText | Should Match 'Protect-Tar <source_directory>'
         $helpText | Should Match '600,000 iterations'
+        $helpText | Should Match '--exclude'
     }
 
     It 'shows Unprotect-Tar help with -h without requiring an archive' {
@@ -263,6 +264,22 @@ exit /b 1
         (Get-Content -LiteralPath $archive -Raw).Trim() | Should Not Be 'existing archive'
         @(Get-ChildItem -LiteralPath $testRoot -Force -File |
             Where-Object Name -Match '\.(tmp|bak)$').Count | Should Be 0
+    }
+
+    It 'omits patterns passed to -Exclude from the archive' {
+        New-Item -ItemType Directory -Path (Join-Path $source 'node_modules') -Force |
+            Out-Null
+        Set-Content -LiteralPath (Join-Path $source 'node_modules/dep.txt') -Value 'dependency'
+        Set-Content -LiteralPath (Join-Path $source 'drop.log') -Value 'drop me'
+        $destination = Join-Path $testRoot 'restored'
+
+        Protect-Tar -Source $source -Output $archive -Exclude 'node_modules', '*.log' |
+            Out-Null
+        Unprotect-Tar -Archive $archive -Destination $destination | Out-Null
+
+        Test-Path -LiteralPath (Join-Path $destination 'source\data.txt') | Should Be $true
+        Test-Path -LiteralPath (Join-Path $destination 'source\node_modules') | Should Be $false
+        Test-Path -LiteralPath (Join-Path $destination 'source\drop.log') | Should Be $false
     }
 
     It 'preserves the backup when publishing and restoration both fail' {

@@ -28,6 +28,8 @@ protect_help="$(Protect-Tar -h)" || fail "Protect-Tar -h failed"
 [[ "$protect_help" == *"USAGE"* ]] || fail "Protect-Tar help has no usage section"
 [[ "$protect_help" == *"600,000 iterations"* ]] ||
     fail "Protect-Tar help has no encryption details"
+[[ "$protect_help" == *"--exclude"* ]] ||
+    fail "Protect-Tar help has no exclude details"
 
 unprotect_help="$(Unprotect-Tar -h)" || fail "Unprotect-Tar -h failed"
 [[ "$unprotect_help" == *"USAGE"* ]] || fail "Unprotect-Tar help has no usage section"
@@ -75,6 +77,26 @@ printf 'password\n' | Protect-Tar "$test_root/source" "$archive" >/dev/null ||
     fail "Protect-Tar failed while replacing an archive"
 [[ "$(<"$plaintext_sibling")" == "preserve sibling" ]] ||
     fail "Protect-Tar changed the filename formerly used for temporary data"
+
+exclude_source="$test_root/exclude-source"
+mkdir -p "$exclude_source/node_modules"
+echo "keep" >"$exclude_source/keep.txt"
+echo "drop" >"$exclude_source/drop.log"
+echo "dep" >"$exclude_source/node_modules/dep.txt"
+exclude_archive="$test_root/exclude.tar.gz.enc"
+printf 'password\n' | Protect-Tar --exclude node_modules --exclude '*.log' \
+    "$exclude_source" "$exclude_archive" >/dev/null ||
+    fail "Protect-Tar with --exclude failed"
+exclude_listing="$(tar -tzf "$exclude_archive")"
+[[ "$exclude_listing" == *"keep.txt"* ]] ||
+    fail "Protect-Tar --exclude removed an included file"
+[[ "$exclude_listing" != *"drop.log"* ]] ||
+    fail "Protect-Tar --exclude did not omit a matched file pattern"
+[[ "$exclude_listing" != *"node_modules"* ]] ||
+    fail "Protect-Tar --exclude did not omit a matched directory"
+
+printf 'password\n' | Protect-Tar --exclude >/dev/null 2>&1 &&
+    fail "Protect-Tar accepted --exclude without a pattern"
 
 destination="$test_root/restored"
 printf 'password\n' | Unprotect-Tar "$archive" "$destination" >/dev/null ||
