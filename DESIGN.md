@@ -37,6 +37,8 @@ or change external configuration. Shared tool configuration lives under
 - `Protect-Tar` accepts repeatable glob exclude patterns (`-Exclude` on
   PowerShell, `--exclude` on Bash) passed through to tar's `--exclude` option
   on both platforms.
+- `Unprotect-Tar` accepts an optional destination directory and defaults to
+  the current directory on both platforms.
 - `Show-Help` is the cross-shell command-reference entry point. It replaces
   PowerShell's `Show-CustomShellHelp` and Bash's `manShell`.
 - Destructive operations must resolve narrow targets and reject broad or empty

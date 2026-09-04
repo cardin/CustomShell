@@ -173,7 +173,7 @@ Unprotect-Tar
     Decrypts and safely extracts an archive created by Protect-Tar.
 
 USAGE
-    Unprotect-Tar <archive.tar.gz.enc> <destination_directory>
+    Unprotect-Tar <archive.tar.gz.enc> [destination_directory]
     Unprotect-Tar -h
 
 ARGUMENTS
@@ -181,8 +181,9 @@ ARGUMENTS
         Encrypted archive created by Protect-Tar.
 
     destination_directory
-        Directory into which the archive is extracted. Filesystem roots, the
-        home directory, and the CustomShell repository root are refused.
+        Directory into which the archive is extracted. Defaults to the current
+        directory. Filesystem roots, the home directory, and the CustomShell
+        repository root are refused.
 
 OPTIONS
     -h, --help
@@ -196,8 +197,8 @@ EOF
             return 0
         fi
 
-        if [[ $# -ne 2 ]]; then
-            echo "Usage: Unprotect-Tar <archive.tar.gz.enc> <destination_directory>"
+        if [[ $# -lt 1 || $# -gt 2 ]]; then
+            echo "Usage: Unprotect-Tar <archive.tar.gz.enc> [destination_directory]"
             return 1
         fi
 
@@ -221,7 +222,7 @@ EOF
             return 1
         fi
 
-        local requested_dest="$2"
+        local requested_dest="${2:-.}"
         if [[ -z "$requested_dest" || -L "$requested_dest" ]]; then
             echo "Error: destination is empty or is a symbolic link."
             return 1

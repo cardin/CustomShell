@@ -15,6 +15,7 @@ fail() {
     exit 1
 }
 
+PROJ_DIR="$(realpath -e -- "$(dirname "${BASH_SOURCE[0]}")/../..")"
 source "$(dirname "${BASH_SOURCE[0]}")/../commands/archive.sh"
 
 declare -F Protect-Tar >/dev/null || fail "Protect-Tar is not defined"
@@ -35,6 +36,8 @@ unprotect_help="$(Unprotect-Tar -h)" || fail "Unprotect-Tar -h failed"
 [[ "$unprotect_help" == *"USAGE"* ]] || fail "Unprotect-Tar help has no usage section"
 [[ "$unprotect_help" == *"transactional"* ]] ||
     fail "Unprotect-Tar help has no extraction details"
+[[ "$unprotect_help" == *"[destination_directory]"* ]] ||
+    fail "Unprotect-Tar help does not show an optional destination"
 
 mkdir -p "$test_root/bin" "$test_root/source"
 echo "archive test" >"$test_root/source/content.txt"
@@ -103,6 +106,15 @@ printf 'password\n' | Unprotect-Tar "$archive" "$destination" >/dev/null ||
     fail "Unprotect-Tar failed"
 [[ "$(<"$destination/source/content.txt")" == "archive test" ]] ||
     fail "Unprotect-Tar did not restore the archived content"
+
+default_destination="$test_root/default-restored"
+mkdir -p "$default_destination"
+(
+    cd "$default_destination" || exit 1
+    printf 'password\n' | Unprotect-Tar "$archive" >/dev/null
+) || fail "Unprotect-Tar failed with its default destination"
+[[ "$(<"$default_destination/source/content.txt")" == "archive test" ]] ||
+    fail "Unprotect-Tar did not use the current directory by default"
 
 echo "unrelated" >"$destination/unrelated.txt"
 printf 'password\n' | Unprotect-Tar "$archive" "$destination" >/dev/null ||
