@@ -4,177 +4,250 @@
 # Sourcing this file only declares commands; it performs no startup work.
 
 # Protect-Tar
-# Compresses a source directory and encrypts it with OpenSSL.
+# Compresses a source item and encrypts it with age.
 function Protect-Tar {
-    (
-        local -a excludes=() positional=()
-        local argument pattern
+	(
+		local -a excludes=() positional=()
+		local argument pattern
+		local no_ignore=false
 
-        while [[ $# -gt 0 ]]; do
-            argument="$1"
-            case "$argument" in
-                -h | --help)
-                    cat <<'EOF'
+		while [[ $# -gt 0 ]]; do
+			argument="$1"
+			case "$argument" in
+			-h | --help)
+				cat <<'EOF'
 Protect-Tar
-    Compresses a directory and encrypts it as an OpenSSL-compatible archive.
+    Compresses a directory or file and encrypts it with age.
 
 USAGE
-    Protect-Tar <source_directory> [output_file.tar.gz.enc] [--exclude PATTERN]...
-    Protect-Tar -h
+    Protect-Tar <source> [output_base] [--exclude PATTERN]... [--no-ignore]
+    Protect-Tar --help
 
 ARGUMENTS
-    source_directory
-        Directory to archive.
+    source
+        File or directory to archive.
 
-    output_file
-        Encrypted output file. By default, a timestamped .tar.gz.enc file is
-        created beside the source directory. An existing file is replaced only
-        after encryption succeeds.
+    output_base
+        Base path for the encrypted output. The command appends a datetime
+        suffix and .enc extension. Defaults to the source path.
 
 OPTIONS
     --exclude PATTERN
         Glob pattern to omit from the archive, passed through to tar's
         --exclude option. Repeatable.
 
-    -h, --help
+    --no-ignore
+        Disable the default recursive .tarignore handling, so all files
+        including those matched by .tarignore files are archived.
+
+    --help
         Displays this help.
 
 NOTES
-    Requires tar, realpath, and OpenSSL. The command prompts for a password.
-    Encryption uses AES-256-CBC with PBKDF2 and 600,000 iterations.
+    Requires tar, realpath, Python 3, and age. The command prompts for a
+    passphrase. Encryption uses age with scrypt key derivation and
+    ChaCha20-Poly1305 authenticated encryption.
 EOF
-                    return 0
-                    ;;
-                --exclude)
-                    if [[ $# -lt 2 || -z "$2" ]]; then
-                        echo "Error: --exclude requires a pattern."
-                        return 1
-                    fi
-                    excludes+=("$2")
-                    shift 2
-                    ;;
-                --exclude=*)
-                    pattern="${argument#--exclude=}"
-                    if [[ -z "$pattern" ]]; then
-                        echo "Error: --exclude requires a pattern."
-                        return 1
-                    fi
-                    excludes+=("$pattern")
-                    shift
-                    ;;
-                --)
-                    shift
-                    positional+=("$@")
-                    break
-                    ;;
-                -*)
-                    echo "Error: Unknown option: $argument"
-                    return 1
-                    ;;
-                *)
-                    positional+=("$argument")
-                    shift
-                    ;;
-            esac
-        done
+				return 0
+				;;
+			--exclude)
+				if [[ $# -lt 2 || -z "$2" ]]; then
+					echo "Error: --exclude requires a pattern."
+					return 1
+				fi
+				excludes+=("$2")
+				shift 2
+				;;
+			--exclude=*)
+				pattern="${argument#--exclude=}"
+				if [[ -z "$pattern" ]]; then
+					echo "Error: --exclude requires a pattern."
+					return 1
+				fi
+				excludes+=("$pattern")
+				shift
+				;;
+			--no-ignore)
+				no_ignore=true
+				shift
+				;;
+			--)
+				shift
+				positional+=("$@")
+				break
+				;;
+			-*)
+				echo "Error: Unknown option: $argument"
+				return 1
+				;;
+			*)
+				positional+=("$argument")
+				shift
+				;;
+			esac
+		done
 
-        set -- "${positional[@]}"
+		set -- "${positional[@]}"
 
-        if [[ $# -lt 1 || $# -gt 2 ]]; then
-            echo "Usage: Protect-Tar <source_directory> [output_file.tar.gz.enc] [--exclude PATTERN]..."
-            return 1
-        fi
+		if [[ $# -lt 1 || $# -gt 2 ]]; then
+			echo "Usage: Protect-Tar <source> [output_base] [--exclude PATTERN]... [--no-ignore]"
+			return 1
+		fi
 
-        if ! command -v openssl >/dev/null 2>&1; then
-            echo "Error: openssl not found in PATH."
-            return 1
-        fi
-        if ! command -v tar >/dev/null 2>&1; then
-            echo "Error: tar not found in PATH."
-            return 1
-        fi
-        if ! command -v realpath >/dev/null 2>&1; then
-            echo "Error: realpath not found in PATH."
-            return 1
-        fi
+		if ! command -v age >/dev/null 2>&1; then
+			echo "Error: age not found in PATH."
+			return 1
+		fi
+		if ! command -v tar >/dev/null 2>&1; then
+			echo "Error: tar not found in PATH."
+			return 1
+		fi
+		if ! command -v realpath >/dev/null 2>&1; then
+			echo "Error: realpath not found in PATH."
+			return 1
+		fi
+		if ! command -v python3 >/dev/null 2>&1; then
+			echo "Error: python3 not found in PATH."
+			return 1
+		fi
+		local auth_helper
+		if [[ -n ${PROJ_DIR:-} ]]; then
+			auth_helper="$PROJ_DIR/linux/commands/archive_auth.py"
+		else
+			auth_helper="$(realpath -e -- "$(dirname -- "${BASH_SOURCE[0]}")/archive_auth.py")" || return 1
+		fi
 
-        local src
-        src="$(realpath -e -- "$1")" || return 1
-        if [[ ! -d "$src" ]]; then
-            echo "Error: '$1' is not a directory."
-            return 1
-        fi
+		local source_input="$1" source_parent source_name src
+		if [[ ! -e "$source_input" && ! -L "$source_input" ]]; then
+			echo "Error: '$source_input' does not exist."
+			return 1
+		fi
+		source_parent="$(realpath -e -- "$(dirname -- "$source_input")")" || return 1
+		source_name="$(basename -- "$source_input")"
+		src="$source_parent/$source_name"
+		if [[ "$src" == / ]]; then
+			echo "Error: Refusing filesystem root as source."
+			return 1
+		fi
+		if [[ ${#excludes[@]} -gt 0 && ! -d "$src" ]]; then
+			echo "Error: --exclude can only be used with a directory source."
+			return 1
+		fi
+		if [[ -t 1 ]]; then
+			echo "[1/4] Validating source paths..."
+		fi
+		local total_files
+		local -a validate_args=(validate-source "$src")
+		if [[ "$no_ignore" == true ]]; then
+			validate_args+=(--no-ignore)
+		fi
+		if ! total_files="$(python3 "$auth_helper" "${validate_args[@]}")"; then
+			echo "Error: Source contains names that are not portable to Windows."
+			return 1
+		fi
 
-        local out="${2:-}"
-        if [[ -z "$out" ]]; then
-            local timestamp
-            timestamp="$(date +%Y%m%d_%H%M%S)"
-            out="$(dirname -- "$src")/$(basename -- "$src")_${timestamp}.tar.gz.enc"
-        fi
+		local output_base="${2:-$src}" timestamp out
+		timestamp="$(date +%Y%m%d_%H%M%S)" || return 1
+		out="${output_base}_${timestamp}.enc"
 
-        local out_dir out_name
-        out_dir="$(dirname -- "$out")"
-        out_name="$(basename -- "$out")"
-        mkdir -p -- "$out_dir" || return 1
-        out_dir="$(realpath -e -- "$out_dir")" || return 1
-        out="$out_dir/$out_name"
-        if [[ -d "$out" ]]; then
-            echo "Error: '$out' is a directory."
-            return 1
-        fi
+		local out_dir out_name
+		out="$(realpath -m -- "$out")" || return 1
+		out_dir="$(dirname -- "$out")"
+		out_name="$(basename -- "$out")"
+		if [[ ! -d "$out_dir" ]]; then
+			echo "Error: Output parent directory does not exist: $out_dir"
+			return 1
+		fi
+		out_dir="$(realpath -e -- "$out_dir")" || return 1
+		out="$out_dir/$out_name"
+		if [[ -e "$out" || -L "$out" ]]; then
+			echo "Error: Output already exists: $out"
+			return 1
+		fi
+		if [[ -d "$src" ]]; then
+			local canonical_output
+			canonical_output="$(realpath -m -- "$out")" || return 1
+			if [[ "$canonical_output" == "$src"/* ]]; then
+				echo "Error: Output cannot be created inside the source directory."
+				return 1
+			fi
+		fi
 
-        local tmp_tar="" tmp_out="" password
-        trap '[[ -z "$tmp_tar" ]] || rm -f -- "$tmp_tar"; [[ -z "$tmp_out" ]] || rm -f -- "$tmp_out"; unset password' EXIT
-        tmp_tar="$(mktemp --suffix=.tar.gz)" || return 1
-        tmp_out="$(mktemp --tmpdir="$out_dir" ".${out_name}.XXXXXX.tmp")" || return 1
+		local tmp_tar="" tmp_out=""
+		trap '[[ -z "$tmp_tar" ]] || rm -f -- "$tmp_tar"; [[ -z "$tmp_out" ]] || rm -f -- "$tmp_out"' EXIT
+		tmp_tar="$(mktemp --suffix=.tar.gz)" || return 1
+		tmp_out="$(mktemp --tmpdir="$out_dir" ".${out_name}.XXXXXX.tmp")" || return 1
+		chmod 600 -- "$tmp_tar" "$tmp_out" || return 1
 
-        if ! read -rsp "Password: " password; then
-            echo
-            echo "Error: Failed to read a password."
-            return 1
-        fi
-        echo
+		local -a exclude_args=()
+		if [[ -d "$src" && "$no_ignore" != true ]]; then
+			exclude_args+=("--exclude-ignore-recursive=.tarignore")
+		fi
+		local exclude_pattern
+		for exclude_pattern in "${excludes[@]}"; do
+			exclude_args+=("--exclude=$exclude_pattern")
+		done
 
-        local -a exclude_args=()
-        local exclude_pattern
-        for exclude_pattern in "${excludes[@]}"; do
-            exclude_args+=("--exclude=$exclude_pattern")
-        done
+		local tar_status=0
+		if [[ -t 1 && "$total_files" =~ ^[0-9]+$ && "$total_files" -gt 0 ]]; then
+			local count=0 pct=0
+			tar -czvf "$tmp_tar" "${exclude_args[@]}" -C "$source_parent" "./$source_name" 2>/dev/null | {
+				while IFS= read -r _; do
+					((count++))
+					pct=$((count * 100 / total_files))
+					((pct > 100)) && pct=100
+					printf "\r\033[K[2/4] Packaging files: %3d%% (%d/%d)" "$pct" "$count" "$total_files"
+				done
+			}
+			tar_status="${PIPESTATUS[0]}"
+			printf "\r\033[K[2/4] Packaging completed (100%%)\n"
+		else
+			tar -czf "$tmp_tar" "${exclude_args[@]}" -C "$source_parent" "./$source_name"
+			tar_status=$?
+		fi
 
-        if ! tar -czf "$tmp_tar" "${exclude_args[@]}" -C "$(dirname -- "$src")" "$(basename -- "$src")"; then
-            echo "Error: Failed to create archive."
-            return 1
-        fi
+		if [[ $tar_status -ne 0 ]]; then
+			echo "Error: Failed to create archive."
+			return 1
+		fi
 
-        if ! openssl enc -aes-256-cbc -pbkdf2 -iter 600000 -salt \
-            -in "$tmp_tar" \
-            -out "$tmp_out" \
-            -pass "pass:$password"; then
-            echo "Error: Encryption failed."
-            return 1
-        fi
+		if [[ -t 1 ]]; then
+			echo "[3/4] Encrypting archive with age..."
+		fi
+		if ! age -p -o "$tmp_out" "$tmp_tar"; then
+			echo "Error: Encryption failed."
+			return 1
+		fi
 
-        if ! mv -f -- "$tmp_out" "$out"; then
-            echo "Error: Failed to publish encrypted archive."
-            return 1
-        fi
-        tmp_out=""
-        echo "Created: $out"
-    )
+		if [[ -t 1 ]]; then
+			echo "[4/4] Publishing archive..."
+		fi
+		if ! mv -f -- "$tmp_out" "$out"; then
+			echo "Error: Failed to publish encrypted archive."
+			return 1
+		fi
+		tmp_out=""
+		if ! rm -f -- "$tmp_tar"; then
+			echo "Error: Archive was published, but temporary file cleanup failed." >&2
+			return 1
+		fi
+		tmp_tar=""
+		echo "Created: $out"
+	)
 }
 
 # Unprotect-Tar
-# Decrypts an OpenSSL archive and extracts it into a destination directory.
+# Decrypts an age archive and extracts it into a destination directory.
 function Unprotect-Tar {
-    (
-        if [[ $# -eq 1 && ( "$1" == -h || "$1" == --help ) ]]; then
-            cat <<'EOF'
+	(
+		if [[ $# -eq 1 && ("$1" == -h || "$1" == --help) ]]; then
+			cat <<'EOF'
 Unprotect-Tar
     Decrypts and safely extracts an archive created by Protect-Tar.
 
 USAGE
-    Unprotect-Tar <archive.tar.gz.enc> [destination_directory]
-    Unprotect-Tar -h
+    Unprotect-Tar <archive.enc> [destination_directory]
+    Unprotect-Tar --help
 
 ARGUMENTS
     archive
@@ -190,171 +263,279 @@ OPTIONS
         Displays this help.
 
 NOTES
-    Requires tar, realpath, and OpenSSL. The command prompts for a password.
-    Archive paths and link entries are validated before transactional
-    extraction.
+    Requires tar, realpath, Python 3, and age. The command prompts for a passphrase.
+    Archive paths are validated before transactional extraction. Symbolic and
+    hard links stored in the archive are preserved.
 EOF
-            return 0
-        fi
+			return 0
+		fi
 
-        if [[ $# -lt 1 || $# -gt 2 ]]; then
-            echo "Usage: Unprotect-Tar <archive.tar.gz.enc> [destination_directory]"
-            return 1
-        fi
+		if [[ $# -lt 1 || $# -gt 2 ]]; then
+			echo "Usage: Unprotect-Tar <archive.enc> [destination_directory]"
+			return 1
+		fi
 
-        if ! command -v openssl >/dev/null 2>&1; then
-            echo "Error: openssl not found in PATH."
-            return 1
-        fi
-        if ! command -v tar >/dev/null 2>&1; then
-            echo "Error: tar not found in PATH."
-            return 1
-        fi
-        if ! command -v realpath >/dev/null 2>&1; then
-            echo "Error: realpath not found in PATH."
-            return 1
-        fi
+		if ! command -v age >/dev/null 2>&1; then
+			echo "Error: age not found in PATH."
+			return 1
+		fi
+		if ! command -v tar >/dev/null 2>&1; then
+			echo "Error: tar not found in PATH."
+			return 1
+		fi
+		if ! command -v realpath >/dev/null 2>&1; then
+			echo "Error: realpath not found in PATH."
+			return 1
+		fi
+		if ! command -v python3 >/dev/null 2>&1; then
+			echo "Error: python3 not found in PATH."
+			return 1
+		fi
+		local auth_helper
+		if [[ -n ${PROJ_DIR:-} ]]; then
+			auth_helper="$PROJ_DIR/linux/commands/archive_auth.py"
+		else
+			auth_helper="$(realpath -e -- "$(dirname -- "${BASH_SOURCE[0]}")/archive_auth.py")" || return 1
+		fi
 
-        local archive
-        archive="$(realpath -e -- "$1")" || return 1
-        if [[ ! -f "$archive" ]]; then
-            echo "Error: '$1' does not exist or is not a file."
-            return 1
-        fi
+		local archive
+		archive="$(realpath -e -- "$1")" || return 1
+		if [[ ! -f "$archive" ]]; then
+			echo "Error: '$1' does not exist or is not a file."
+			return 1
+		fi
 
-        local requested_dest="${2:-.}"
-        if [[ -z "$requested_dest" || -L "$requested_dest" ]]; then
-            echo "Error: destination is empty or is a symbolic link."
-            return 1
-        fi
+		local requested_dest="${2:-.}"
+		if [[ -z "$requested_dest" || -L "$requested_dest" ]]; then
+			echo "Error: destination is empty or is a symbolic link."
+			return 1
+		fi
 
-        local dest home_path repository_path
-        dest="$(realpath -m -- "$requested_dest")" || return 1
-        home_path="$(realpath -m -- "${HOME:?HOME is not set}")" || return 1
-        if [[ -n ${PROJ_DIR:-} ]]; then
-            repository_path="$(realpath -m -- "$PROJ_DIR")" || return 1
-        else
-            repository_path="$(realpath -m -- "$(dirname -- "${BASH_SOURCE[0]}")/../..")" || return 1
-        fi
-        if [[ "$dest" == / || "$dest" == "$home_path" || "$dest" == "$repository_path" ]]; then
-            echo "Error: Refusing protected destination: $dest"
-            return 1
-        fi
-        if [[ -e "$dest" && ! -d "$dest" ]]; then
-            echo "Error: '$dest' is not a directory."
-            return 1
-        fi
+		local dest home_path repository_path
+		dest="$(realpath -m -- "$requested_dest")" || return 1
+		home_path="$(realpath -m -- "${HOME:?HOME is not set}")" || return 1
+		if [[ -n ${PROJ_DIR:-} ]]; then
+			repository_path="$(realpath -m -- "$PROJ_DIR")" || return 1
+		else
+			repository_path="$(realpath -m -- "$(dirname -- "${BASH_SOURCE[0]}")/../..")" || return 1
+		fi
+		if [[ "$dest" == / || "$dest" == "$home_path" || "$dest" == "$repository_path" ]]; then
+			echo "Error: Refusing protected destination: $dest"
+			return 1
+		fi
+		if [[ -e "$dest" && ! -d "$dest" ]]; then
+			echo "Error: '$dest' is not a directory."
+			return 1
+		fi
 
-        local tmp_tar="" list_file="" verbose_file="" staging="" backup=""
-        local preserve_backup=false password
-        trap '
+		local tmp_tar="" list_file="" staging="" transaction=""
+		local preserve_transaction=false
+		trap '
             [[ -z "$tmp_tar" ]] || rm -f -- "$tmp_tar"
             [[ -z "$list_file" ]] || rm -f -- "$list_file"
-            [[ -z "$verbose_file" ]] || rm -f -- "$verbose_file"
             [[ -z "$staging" ]] || rm -rf -- "$staging"
-            if [[ -n "$backup" && "$preserve_backup" != true ]]; then rm -rf -- "$backup"; fi
-            unset password
+            if [[ -n "$transaction" && "$preserve_transaction" != true ]]; then rm -rf -- "$transaction"; fi
         ' EXIT
-        tmp_tar="$(mktemp --suffix=.tar.gz)" || return 1
-        list_file="$(mktemp)" || return 1
-        verbose_file="$(mktemp)" || return 1
+		tmp_tar="$(mktemp --suffix=.tar.gz)" || return 1
+		list_file="$(mktemp)" || return 1
+		chmod 600 -- "$tmp_tar" "$list_file" || return 1
 
-        if ! read -rsp "Password: " password; then
-            echo
-            echo "Error: Failed to read a password."
-            return 1
-        fi
-        echo
+		if [[ -t 1 ]]; then
+			echo "[1/4] Decrypting and authenticating with age..."
+		fi
+		if ! age -d -o "$tmp_tar" "$archive"; then
+			echo "Error: Decryption failed (incorrect password or unsupported archive)."
+			return 1
+		fi
 
-        if ! openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 \
-            -in "$archive" -out "$tmp_tar" -pass "pass:$password" 2>/dev/null; then
-            echo "Error: Decryption failed (incorrect password or unsupported archive)."
-            return 1
-        fi
+		if [[ -t 1 ]]; then
+			echo "[2/4] Validating archive contents..."
+		fi
+		local total_entries
+		if ! total_entries="$(python3 "$auth_helper" validate-tar "$tmp_tar" linux)"; then
+			echo "Error: Archive contents are unsafe or not portable."
+			return 1
+		fi
 
-        if ! tar -tzf "$tmp_tar" >"$list_file" || ! tar -tvzf "$tmp_tar" >"$verbose_file"; then
-            echo "Error: Failed to inspect archive."
-            return 1
-        fi
+		if ! tar -tzf "$tmp_tar" >"$list_file"; then
+			echo "Error: Failed to inspect archive."
+			return 1
+		fi
 
-        local entry component entry_type
-        while IFS= read -r entry; do
-            while [[ "$entry" == ./* ]]; do entry="${entry#./}"; done
-            if [[ "$entry" == /* ]]; then
-                echo "Error: Archive contains an absolute path: $entry"
-                return 1
-            fi
-            IFS='/' read -r -a components <<<"$entry"
-            for component in "${components[@]}"; do
-                if [[ "$component" == .. ]]; then
-                    echo "Error: Archive contains path traversal: $entry"
-                    return 1
-                fi
-            done
-        done <"$list_file"
-        while IFS= read -r entry; do
-            entry_type="${entry:0:1}"
-            if [[ "$entry_type" == l || "$entry_type" == h ]]; then
-                echo "Error: Archive contains a symbolic-link or hard-link entry."
-                return 1
-            fi
-        done <"$verbose_file"
+		local entry component
+		while IFS= read -r entry; do
+			while [[ "$entry" == ./* ]]; do entry="${entry#./}"; done
+			if [[ "$entry" == /* ]]; then
+				echo "Error: Archive contains an absolute path: $entry"
+				return 1
+			fi
+			IFS='/' read -r -a components <<<"$entry"
+			for component in "${components[@]}"; do
+				if [[ "$component" == .. ]]; then
+					echo "Error: Archive contains path traversal: $entry"
+					return 1
+				fi
+			done
+		done <"$list_file"
+		local parent dest_name
+		parent="$(dirname -- "$dest")"
+		dest_name="$(basename -- "$dest")"
+		if [[ ! -d "$parent" ]]; then
+			echo "Error: Destination parent directory does not exist: $parent"
+			return 1
+		fi
+		parent="$(realpath -e -- "$parent")" || return 1
+		dest="$parent/$dest_name"
+		staging="$(mktemp -d "$parent/.${dest_name}.stage.XXXXXX")" || return 1
 
-        local parent dest_name
-        parent="$(dirname -- "$dest")"
-        dest_name="$(basename -- "$dest")"
-        mkdir -p -- "$parent" || return 1
-        parent="$(realpath -e -- "$parent")" || return 1
-        dest="$parent/$dest_name"
-        staging="$(mktemp -d "$parent/.${dest_name}.stage.XXXXXX")" || return 1
+		local tar_status=0
+		if [[ -t 1 && "$total_entries" =~ ^[0-9]+$ && "$total_entries" -gt 0 ]]; then
+			local count=0 pct=0
+			tar -xzvf "$tmp_tar" -C "$staging" 2>/dev/null | {
+				while IFS= read -r _; do
+					((count++))
+					pct=$((count * 100 / total_entries))
+					((pct > 100)) && pct=100
+					printf "\r\033[K[3/4] Extracting files: %3d%% (%d/%d)" "$pct" "$count" "$total_entries"
+				done
+			}
+			tar_status="${PIPESTATUS[0]}"
+			printf "\r\033[K[3/4] Extraction completed (100%%)\n"
+		else
+			tar -xzf "$tmp_tar" -C "$staging"
+			tar_status=$?
+		fi
 
-        if [[ -d "$dest" ]]; then
-            if [[ -n "$(find "$dest" -type l -print -quit)" || -n "$(find "$dest" -type f -links +1 -print -quit)" ]]; then
-                echo "Error: Existing destination contains symbolic or hard links."
-                return 1
-            fi
-            cp -a -- "$dest/." "$staging/" || return 1
-        fi
+		if [[ $tar_status -ne 0 ]]; then
+			echo "Error: Failed to extract archive."
+			return 1
+		fi
 
-        if ! tar -xzf "$tmp_tar" -C "$staging"; then
-            echo "Error: Failed to extract archive."
-            return 1
-        fi
-        if [[ -n "$(find "$staging" -type l -print -quit)" || -n "$(find "$staging" -type f -links +1 -print -quit)" ]]; then
-            echo "Error: Extracted content contains symbolic or hard links."
-            return 1
-        fi
+		if [[ -t 1 ]]; then
+			echo "[4/4] Merging and finalizing destination..."
+		fi
+		local -a staged_items=()
+		shopt -s dotglob nullglob
+		staged_items=("$staging"/*)
+		shopt -u dotglob nullglob
+		if [[ ${#staged_items[@]} -ne 1 ]]; then
+			echo "Error: Archive must contain exactly one top-level item."
+			return 1
+		fi
+		if [[ -d "$dest" ]]; then
+			transaction="$(mktemp -d "$parent/.${dest_name}.transaction.XXXXXX")" || return 1
+			local candidate="$transaction/candidate"
+			local backup="$transaction/backup"
+			mkdir -- "$candidate" "$backup" || return 1
 
-        if [[ -d "$dest" ]]; then
-            backup="$(mktemp -d "$parent/.${dest_name}.backup.XXXXXX")" || return 1
-            rmdir -- "$backup" || return 1
-            if ! mv -- "$dest" "$backup"; then
-                echo "Error: Failed to stage the existing destination for replacement."
-                return 1
-            fi
-            preserve_backup=true
-            if ! mv -- "$staging" "$dest"; then
-                if mv -- "$backup" "$dest"; then
-                    backup=""
-                    preserve_backup=false
-                    echo "Error: Failed to publish extracted content; the original was restored."
-                else
-                    echo "Error: Publication and rollback failed; original data is preserved at: $backup"
-                fi
-                return 1
-            fi
-            staging=""
-            preserve_backup=false
-            rm -rf -- "$backup"
-            backup=""
-        else
-            if ! mv -- "$staging" "$dest"; then
-                echo "Error: Failed to publish extracted content."
-                return 1
-            fi
-            staging=""
-        fi
+			local -a item_names=() backed_up=() published=()
+			local staged_item item_name target_path candidate_path
 
-        echo "Extracted to: $dest"
-    )
+			local collision=false response
+			for staged_item in "${staged_items[@]}"; do
+				item_name="${staged_item##*/}"
+				if [[ -e "$dest/$item_name" || -L "$dest/$item_name" ]]; then
+					collision=true
+				fi
+			done
+			if [[ "$collision" == true ]]; then
+				if [[ ! -t 0 ]]; then
+					echo "Error: Extraction target exists and confirmation requires an interactive terminal."
+					return 1
+				fi
+				read -rp "Extraction target exists. Merge archived content? [y/N] " response || return 1
+				if [[ "$response" != y && "$response" != Y && "$response" != yes && "$response" != YES ]]; then
+					echo "Error: Extraction cancelled; destination was not changed."
+					return 1
+				fi
+			fi
+
+			for staged_item in "${staged_items[@]}"; do
+				item_name="${staged_item##*/}"
+				target_path="$dest/$item_name"
+				candidate_path="$candidate/$item_name"
+
+				if [[ -d "$target_path" && ! -L "$target_path" && -d "$staged_item" && ! -L "$staged_item" ]]; then
+					mkdir -- "$candidate_path" || return 1
+					cp -a -- "$target_path/." "$candidate_path/" || return 1
+					cp -a -- "$staged_item/." "$candidate_path/" || return 1
+				else
+					cp -a -- "$staged_item" "$candidate/" || return 1
+				fi
+
+				item_names+=("$item_name")
+				backed_up+=(false)
+				published+=(false)
+			done
+
+			local publish_failed=false publish_error="" index
+			for index in "${!item_names[@]}"; do
+				item_name="${item_names[$index]}"
+				target_path="$dest/$item_name"
+				candidate_path="$candidate/$item_name"
+
+				if [[ -e "$target_path" || -L "$target_path" ]]; then
+					if ! mv -- "$target_path" "$backup/$item_name"; then
+						publish_error="Failed to back up existing archive target: $target_path"
+						publish_failed=true
+						break
+					fi
+					backed_up[index]=true
+				fi
+
+				if ! mv -- "$candidate_path" "$target_path"; then
+					publish_error="Failed to publish extracted archive target: $target_path"
+					publish_failed=true
+					break
+				fi
+				published[index]=true
+			done
+
+			if [[ "$publish_failed" == true ]]; then
+				local rollback_failed=false
+				for ((index = ${#item_names[@]} - 1; index >= 0; index--)); do
+					item_name="${item_names[$index]}"
+					target_path="$dest/$item_name"
+
+					if [[ "${published[$index]}" == true ]]; then
+						rm -rf -- "$target_path" || rollback_failed=true
+					fi
+					if [[ "${backed_up[$index]}" == true && ! -e "$target_path" && ! -L "$target_path" ]]; then
+						mv -- "$backup/$item_name" "$target_path" || rollback_failed=true
+					fi
+				done
+
+				if [[ "$rollback_failed" == true ]]; then
+					preserve_transaction=true
+					echo "Error: $publish_error; rollback was incomplete. Original data is preserved under: $backup"
+				else
+					echo "Error: $publish_error; the original destination content was restored."
+				fi
+				return 1
+			fi
+
+			if rm -rf -- "$transaction"; then
+				transaction=""
+			else
+				preserve_transaction=true
+				echo "Error: Extracted content was published, but transaction cleanup failed: $transaction" >&2
+				return 1
+			fi
+		else
+			if ! mv -- "$staging" "$dest"; then
+				echo "Error: Failed to publish extracted content."
+				return 1
+			fi
+			staging=""
+		fi
+
+		if ! rm -f -- "$tmp_tar" "$list_file" || ! rm -rf -- "$staging"; then
+			echo "Error: Extracted content was published, but temporary file cleanup failed." >&2
+			return 1
+		fi
+		tmp_tar=""
+		list_file=""
+		staging=""
+		echo "Extracted to: $dest"
+	)
 }

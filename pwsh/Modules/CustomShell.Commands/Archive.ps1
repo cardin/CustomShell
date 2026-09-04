@@ -1,5 +1,5 @@
 # Implements the paired commands for creating and extracting encrypted tar
-# archives with OpenSSL. Temporary files, replacement safety, and extraction
+# archives with age. Temporary files, replacement safety, and extraction
 # path validation are handled here so callers receive consistent cleanup behavior.
 
 function Move-CustomShellArchiveFile {
@@ -31,31 +31,43 @@ function Move-CustomShellArchiveItem {
         -ErrorAction Stop
 }
 
+function Confirm-CustomShellArchiveCollision {
+    [CmdletBinding()]
+    param()
+
+    if ([Console]::IsInputRedirected) {
+        return $false
+    }
+    $response = Read-Host -Prompt 'Extraction target exists. Merge archived content? [y/N]'
+    $response -cin @('y', 'yes')
+}
+
 function Protect-Tar {
     <#
     .SYNOPSIS
-    Compresses a folder and encrypts it using OpenSSL.
+    Compresses a file or folder and encrypts it using OpenSSL.
 
     .DESCRIPTION
-    Creates a temporary tar.gz archive, then encrypts it with
-    AES-256-CBC and PBKDF2. Existing output is replaced only after encryption
-    succeeds, and temporary or backup files are removed during cleanup.
+    Creates a temporary tar.gz archive, encrypts it with AES-256-CBC and
+    PBKDF2, authenticates the result with HMAC-SHA-256, and publishes a new
+    timestamped .enc file only after every prior step succeeds.
 
-    OpenSSL prompts for the password and confirmation.
+    Prompts for the password and confirmation.
 
     .PARAMETER Source
-    Folder to archive.
+    File or folder to archive.
 
     .PARAMETER Output
-    Encrypted output file. Defaults to <folder>_<yyyyMMdd_HHmmss>.tar.gz.enc
-    beside the source folder.
+    Base path for the encrypted output. The command appends
+    _<yyyyMMdd_HHmmss>.enc. Defaults to the source path.
 
     .PARAMETER Exclude
     Glob pattern(s) to omit from the archive, passed through to tar's
     --exclude option. Repeatable.
 
-    .PARAMETER Force
-    Replaces the output file if it already exists.
+    .PARAMETER NoIgnore
+    Disable the default recursive .tarignore handling, so all files
+    including those matched by .tarignore files are archived.
 
     .PARAMETER Help
     Displays command usage and archive details without creating an archive.
@@ -64,10 +76,7 @@ function Protect-Tar {
     Protect-Tar C:\Projects\MyRepo
 
     .EXAMPLE
-    Protect-Tar C:\Projects\MyRepo D:\Backups\MyRepo.tar.gz.enc
-
-    .EXAMPLE
-    Protect-Tar C:\Projects\MyRepo -Force
+    Protect-Tar C:\Projects\MyRepo D:\Backups\MyRepo
 
     .EXAMPLE
     Protect-Tar C:\Projects\MyRepo -Exclude 'node_modules', '*.log'
@@ -79,7 +88,7 @@ function Protect-Tar {
         [ValidateNotNullOrEmpty()]
         [string] $Source,
 
-        [Parameter(Position = 1, ParameterSetName = 'Archive')]
+        [Parameter(ParameterSetName = 'Archive')]
         [ValidateNotNullOrEmpty()]
         [string] $Output,
 
@@ -87,59 +96,96 @@ function Protect-Tar {
         [string[]] $Exclude,
 
         [Parameter(ParameterSetName = 'Archive')]
-        [switch] $Force,
+        [switch] $NoIgnore,
+
+        [Parameter(ValueFromRemainingArguments, ParameterSetName = 'Archive')]
+        [object[]] $PortableArguments,
 
         [Parameter(Mandatory, ParameterSetName = 'Help')]
         [Alias('h')]
         [switch] $Help
     )
 
+    if ($Source -eq '--help' -and $PortableArguments.Count -eq 0) {
+        $Help = $true
+    }
+
     if ($Help) {
         @'
 Protect-Tar
-    Compresses a directory and encrypts it as an OpenSSL-compatible archive.
+    Compresses a directory or file and encrypts it with age.
 
 USAGE
-    Protect-Tar <source_directory> [output_file.tar.gz.enc] [-Force] [-Exclude <pattern>...]
-    Protect-Tar -Source <source_directory> [-Output <file>] [-Force] [-Exclude <pattern>...]
-    Protect-Tar -h
+    Protect-Tar <source> [output_base] [--exclude <pattern>...] [--no-ignore]
+    Protect-Tar --help
 
 PARAMETERS
-    source_directory / -Source
-        Directory to archive.
+    source / -Source
+        File or directory to archive.
 
-    output_file / -Output
-        Encrypted output file. By default, a timestamped .tar.gz.enc file is
-        created beside the source directory.
+    output_base / -Output
+        Base path for the encrypted output. The command appends a datetime
+        suffix and .enc extension. Defaults to the source path.
 
-    -Exclude <pattern>
+    --exclude <pattern>
         Glob pattern to omit from the archive, passed through to tar's
         --exclude option. Repeatable.
 
-    -Force
-        Replaces an existing output file after encryption succeeds.
+    --no-ignore / -NoIgnore
+        Disable the default recursive .tarignore handling, so all files
+        including those matched by .tarignore files are archived.
 
-    -h / -Help
+    --help
         Displays this help.
 
 NOTES
-    Requires tar.exe and OpenSSL. OpenSSL prompts for the password and its
-    confirmation. Encryption uses AES-256-CBC.
-    PBKDF2 uses 600,000 iterations.
+    Requires tar.exe and age.exe. Encryption uses age with scrypt key
+    derivation and ChaCha20-Poly1305 authenticated encryption.
 '@
         return
     }
 
-    $openssl = Get-Command openssl -ErrorAction SilentlyContinue
+    for ($index = 0; $index -lt $PortableArguments.Count; $index++) {
+        $argument = [string] $PortableArguments[$index]
+        if ($argument -eq '--exclude') {
+            if ($index + 1 -ge $PortableArguments.Count) {
+                throw '--exclude requires a pattern.'
+            }
+            $index++
+            $pattern = [string] $PortableArguments[$index]
+            if ([string]::IsNullOrEmpty($pattern)) {
+                throw '--exclude requires a pattern.'
+            }
+            $Exclude += $pattern
+        }
+        elseif ($argument.StartsWith('--exclude=')) {
+            $pattern = $argument.Substring('--exclude='.Length)
+            if ([string]::IsNullOrEmpty($pattern)) {
+                throw '--exclude requires a pattern.'
+            }
+            $Exclude += $pattern
+        }
+        elseif ($argument -eq '--no-ignore') {
+            $NoIgnore = $true
+        }
+        elseif ($argument.StartsWith('-')) {
+            throw "Unknown option: $argument"
+        }
+        elseif ([string]::IsNullOrWhiteSpace($Output)) {
+            $Output = $argument
+        }
+        else {
+            throw "Unexpected argument: $argument"
+        }
+    }
 
-    if (-not $openssl) {
+    $age = Get-Command age -ErrorAction SilentlyContinue
+
+    if (-not $age) {
         throw @"
-OpenSSL was not found in PATH.
+age was not found in PATH.
 
-Install OpenSSL or ensure openssl.exe is available in PATH.
-You can verify it with:
-
-    openssl version
+Install age or ensure age.exe is available in PATH.
 "@
     }
 
@@ -149,40 +195,55 @@ You can verify it with:
         throw 'tar.exe was not found in PATH.'
     }
 
+    Write-Progress -Activity 'Protect-Tar' -Status '[1/4] Validating source paths...' -PercentComplete 5
     $sourceItem = Get-Item -LiteralPath $Source -ErrorAction Stop
-
-    if (-not $sourceItem.PSIsContainer) {
-        throw "'$Source' is not a folder."
+    $sourceParentPath = if ($sourceItem.PSIsContainer) {
+        $sourceItem.Parent.FullName
+    }
+    else {
+        $sourceItem.Directory.FullName
     }
 
-    if ([string]::IsNullOrWhiteSpace($Output)) {
-        $timestamp = Get-Date -Format 'yyyyMMdd_HHmmss'
-        $Output = Join-Path `
-            $sourceItem.Parent.FullName `
-            "$($sourceItem.Name)_$timestamp.tar.gz.enc"
+    if ($sourceItem.FullName -eq [IO.Path]::GetPathRoot($sourceItem.FullName)) {
+        throw 'Refusing a filesystem root as source.'
     }
 
-    $outputPath = $ExecutionContext.SessionState.Path.
-    GetUnresolvedProviderPathFromPSPath($Output)
+    if ($Exclude.Count -gt 0 -and -not $sourceItem.PSIsContainer) {
+        throw '-Exclude can only be used with a directory source.'
+    }
+
+    $outputBase = if ([string]::IsNullOrWhiteSpace($Output)) {
+        $sourceItem.FullName
+    }
+    else {
+        $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Output)
+    }
+    $timestamp = Get-Date -Format 'yyyyMMdd_HHmmss'
+    $outputPath = "${outputBase}_${timestamp}.enc"
 
     $outputExists = Test-Path -LiteralPath $outputPath
 
-    if ($outputExists -and -not $Force) {
-        throw "Output file already exists: $outputPath`nUse -Force to replace it."
+    if ($outputExists) {
+        throw "Output file already exists: $outputPath"
     }
 
     $outputDirectory = Split-Path -Parent $outputPath
 
     if (
         $outputDirectory -and
-        -not (Test-Path -LiteralPath $outputDirectory)
+        -not (Test-Path -LiteralPath $outputDirectory -PathType Container)
     ) {
-        New-Item `
-            -ItemType Directory `
-            -Path $outputDirectory `
-            -Force `
-            -ErrorAction Stop |
-        Out-Null
+        throw "Output parent directory does not exist: $outputDirectory"
+    }
+
+    if (
+        $sourceItem.PSIsContainer -and
+        $outputPath.StartsWith(
+            "$($sourceItem.FullName.TrimEnd('\', '/'))$([IO.Path]::DirectorySeparatorChar)",
+            [StringComparison]::OrdinalIgnoreCase
+        )
+    ) {
+        throw 'Output cannot be created inside the source directory.'
     }
 
     $temporaryTar = Join-Path `
@@ -195,33 +256,95 @@ You can verify it with:
         $outputDirectory `
         ".$([IO.Path]::GetFileName($outputPath)).$([guid]::NewGuid()).tmp"
 
-    $replacementBackup = Join-Path `
-        $outputDirectory `
-        ".$([IO.Path]::GetFileName($outputPath)).$([guid]::NewGuid()).bak"
-
-    # Once the existing archive is moved aside, this flag prevents cleanup from
-    # deleting the only preserved copy unless publishing or restoration succeeds.
-    $preserveReplacementBackup = $false
-
     try {
+        Write-Progress -Activity 'Protect-Tar' -Status '[2/4] Packaging files...' -PercentComplete 25
         Write-Verbose "Creating temporary archive: $temporaryTar"
+
+        $tarignoreExcludes = @(
+            if ($sourceItem.PSIsContainer -and -not $NoIgnore) {
+                $ignoreFiles = @(Get-ChildItem -LiteralPath $sourceItem.FullName -Filter '.tarignore' -Recurse -Force -File -ErrorAction SilentlyContinue)
+                foreach ($ignoreFile in $ignoreFiles) {
+                    $dir = $ignoreFile.Directory
+                    $relDir = if ($dir.FullName -eq $sourceItem.FullName) {
+                        ''
+                    }
+                    else {
+                        $dir.FullName.Substring($sourceItem.FullName.Length + 1).Replace('\', '/')
+                    }
+                    $lines = @(Get-Content -LiteralPath $ignoreFile.FullName -ErrorAction SilentlyContinue)
+                    foreach ($line in $lines) {
+                        $trimmed = $line.Trim()
+                        if ([string]::IsNullOrWhiteSpace($trimmed) -or $trimmed.StartsWith('#')) {
+                            continue
+                        }
+                        if (-not ($trimmed.Contains('/') -or $trimmed.Contains('\'))) {
+                            if ([string]::IsNullOrEmpty($relDir)) {
+                                "--exclude=$trimmed"
+                            }
+                            else {
+                                "--exclude=*$($sourceItem.Name)/$relDir/$trimmed"
+                                "--exclude=*$($sourceItem.Name)/$relDir/$trimmed/*"
+                            }
+                        }
+                        else {
+                            $clean = $trimmed.TrimStart('/', '\').Replace('\', '/')
+                            if ([string]::IsNullOrEmpty($relDir)) {
+                                "--exclude=*$($sourceItem.Name)/$clean"
+                                "--exclude=*$($sourceItem.Name)/$clean/*"
+                            }
+                            else {
+                                "--exclude=*$($sourceItem.Name)/$relDir/$clean"
+                                "--exclude=*$($sourceItem.Name)/$relDir/$clean/*"
+                            }
+                        }
+                    }
+                }
+            }
+        )
 
         $excludeArgs = @(
             foreach ($pattern in $Exclude) {
                 "--exclude=$pattern"
             }
+            $tarignoreExcludes
         )
+        Write-Verbose "Archiving '$($sourceItem.Name)' from '$sourceParentPath'."
+
+        $totalItems = if ($sourceItem.PSIsContainer) {
+            (Get-ChildItem -LiteralPath $sourceItem.FullName -Recurse -Force | Measure-Object).Count + 1
+        }
+        else {
+            1
+        }
+        $count = 0
 
         $tarOutput = & $tar.Source `
-            -czf $temporaryTar `
+            -czvf $temporaryTar `
             @excludeArgs `
-            -C $sourceItem.Parent.FullName `
-            $sourceItem.Name 2>&1
+            -C $sourceParentPath `
+            ".\$($sourceItem.Name)" 2>&1 | ForEach-Object {
+            $line = $_.ToString()
+            if ($line -match '^a\s') {
+                $count++
+                if ($totalItems -gt 0) {
+                    $pct = [Math]::Min(100, [int](($count / $totalItems) * 100))
+                    Write-Progress -Activity 'Protect-Tar' -Status "[2/4] Packaging files: $pct% ($count/$totalItems)" -PercentComplete $pct
+                }
+            }
+            $_
+        }
 
         if ($LASTEXITCODE -ne 0) {
             $tarText = ($tarOutput | ForEach-Object { $_.ToString() }) -join "`n"
-            $reparseItems = @(Get-ChildItem -LiteralPath $sourceItem.FullName -Recurse -Force -ErrorAction SilentlyContinue |
-                Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint })
+            $reparseItems = @(
+                if ($sourceItem.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+                    $sourceItem
+                }
+                if ($sourceItem.PSIsContainer) {
+                    Get-ChildItem -LiteralPath $sourceItem.FullName -Recurse -Force -ErrorAction SilentlyContinue |
+                        Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint }
+                }
+            )
 
             if ($tarText -match 'Cannot stat' -or $tarText -match 'symlink' -or $reparseItems.Count -gt 0) {
                 $symlinkDetails = if ($reparseItems.Count -gt 0) {
@@ -258,82 +381,52 @@ To resolve this issue:
             throw "tar.exe failed with exit code $LASTEXITCODE."
         }
 
+        $createdArchiveDetails = @(& $tar.Source -tvzf $temporaryTar)
+        if ($LASTEXITCODE -ne 0) {
+            throw "tar.exe could not inspect the created archive (exit code $LASTEXITCODE)."
+        }
+        foreach ($detail in $createdArchiveDetails) {
+            $detailText = [string] $detail
+            if (
+                $detailText -match '^[lh]' -or
+                $detailText -match '\s->\s' -or
+                $detailText -match '\slink to\s'
+            ) {
+                throw "Symbolic and hard links are not supported on Windows: $detailText"
+            }
+        }
+
+        Write-Progress -Activity 'Protect-Tar' -Status '[3/4] Encrypting archive with age...' -PercentComplete 75
         Write-Verbose "Encrypting archive as: $outputPath"
 
-        # OpenSSL prompts twice:
-        # Enter encryption password:
-        # Verifying - Enter encryption password:
-        & $openssl.Source enc `
-            -aes-256-cbc `
-            -salt `
-            -pbkdf2 `
-            -iter 600000 `
-            -in $temporaryTar `
-            -out $temporaryOutput
+        $ageOutput = & $age.Source -p -o $temporaryOutput $temporaryTar 2>&1
 
         if ($LASTEXITCODE -ne 0) {
-            throw "OpenSSL encryption failed with exit code $LASTEXITCODE."
+            $ageText = ($ageOutput | ForEach-Object { $_.ToString() }) -join "`n"
+            throw "Encryption failed with exit code ${LASTEXITCODE}: $ageText"
         }
 
-        if ($outputExists) {
-            # ReplaceFile/File.Replace can be rejected by some Windows
-            # filesystems and sandbox providers. Use same-directory renames so
-            # the original can still be restored if publishing the new archive
-            # fails.
-            Move-CustomShellArchiveFile `
-                -SourcePath $outputPath `
-                -DestinationPath $replacementBackup
-            $preserveReplacementBackup = $true
-            try {
-                Move-CustomShellArchiveFile `
-                    -SourcePath $temporaryOutput `
-                    -DestinationPath $outputPath
-                $preserveReplacementBackup = $false
-            }
-            catch {
-                $publishError = $_
-                try {
-                    Move-CustomShellArchiveFile `
-                        -SourcePath $replacementBackup `
-                        -DestinationPath $outputPath
-                    $preserveReplacementBackup = $false
-                }
-                catch {
-                    throw @"
-Publishing the replacement archive failed, and the original could not be
-restored automatically. The original archive is preserved at:
+        Write-Progress -Activity 'Protect-Tar' -Status '[4/4] Publishing archive...' -PercentComplete 95
+        Move-CustomShellArchiveFile `
+            -SourcePath $temporaryOutput `
+            -DestinationPath $outputPath
 
-    $replacementBackup
-
-Publish error: $($publishError.Exception.Message)
-Restore error: $($_.Exception.Message)
-"@
-                }
-
-                throw $publishError
-            }
+        try {
+            Remove-Item -LiteralPath $temporaryTar -Force -ErrorAction Stop
         }
-        else {
-            Move-CustomShellArchiveFile `
-                -SourcePath $temporaryOutput `
-                -DestinationPath $outputPath
+        catch {
+            throw "Archive was published, but temporary file cleanup failed: $($_.Exception.Message)"
         }
 
         Write-Verbose 'Encrypted archive created successfully.'
         Get-Item -LiteralPath $outputPath
     }
     finally {
+        Write-Progress -Activity 'Protect-Tar' -Completed
         Remove-Item `
             -LiteralPath $temporaryTar, $temporaryOutput `
             -Force `
             -ErrorAction SilentlyContinue
-
-        if (-not $preserveReplacementBackup) {
-            Remove-Item `
-                -LiteralPath $replacementBackup `
-                -Force `
-                -ErrorAction SilentlyContinue
-        }
     }
 }
 
@@ -350,7 +443,7 @@ function Unprotect-Tar {
     failed operations do not leave partial destination changes. Symbolic-link
     and hard-link archive entries are rejected.
 
-    OpenSSL prompts for the password.
+    Prompts for the password.
 
     .PARAMETER Archive
     Encrypted archive created by Protect-Tar.
@@ -363,10 +456,10 @@ function Unprotect-Tar {
     Displays command usage and archive details without extracting an archive.
 
     .EXAMPLE
-    Unprotect-Tar C:\Backups\MyRepo.tar.gz.enc
+    Unprotect-Tar C:\Backups\MyRepo_20260904_120000.enc
 
     .EXAMPLE
-    Unprotect-Tar C:\Backups\MyRepo.tar.gz.enc C:\Restored
+    Unprotect-Tar C:\Backups\MyRepo_20260904_120000.enc C:\Restored
     #>
 
     [CmdletBinding(DefaultParameterSetName = 'Extract')]
@@ -375,14 +468,21 @@ function Unprotect-Tar {
         [ValidateNotNullOrEmpty()]
         [string] $Archive,
 
-        [Parameter(Position = 1, ParameterSetName = 'Extract')]
+        [Parameter(ParameterSetName = 'Extract')]
         [ValidateNotNullOrEmpty()]
         [string] $Destination = '.',
+
+        [Parameter(ValueFromRemainingArguments, ParameterSetName = 'Extract')]
+        [object[]] $PortableArguments,
 
         [Parameter(Mandatory, ParameterSetName = 'Help')]
         [Alias('h')]
         [switch] $Help
     )
+
+    if ($Archive -eq '--help' -and $PortableArguments.Count -eq 0) {
+        $Help = $true
+    }
 
     if ($Help) {
         @'
@@ -390,9 +490,9 @@ Unprotect-Tar
     Decrypts and safely extracts an archive created by Protect-Tar.
 
 USAGE
-    Unprotect-Tar <archive.tar.gz.enc> [destination_directory]
+    Unprotect-Tar <archive.enc> [destination_directory]
     Unprotect-Tar -Archive <file> [-Destination <directory>]
-    Unprotect-Tar -h
+    Unprotect-Tar --help
 
 PARAMETERS
     archive / -Archive
@@ -403,26 +503,35 @@ PARAMETERS
         directory. Filesystem roots, the home directory, and the CustomShell
         repository root are refused.
 
-    -h / -Help
+    --help
         Displays this help.
 
 NOTES
-    Requires tar.exe and OpenSSL. OpenSSL prompts for the password. Archive
-    paths and link entries are validated before transactional extraction.
+    Requires tar.exe and age.exe. Archives are decrypted and authenticated with
+    age before archive paths and link entries are validated and transactionally
+    extracted.
 '@
         return
     }
 
-    $openssl = Get-Command openssl -ErrorAction SilentlyContinue
+    foreach ($argument in $PortableArguments) {
+        $argumentText = [string] $argument
+        if ($argumentText.StartsWith('-')) {
+            throw "Unknown option: $argumentText"
+        }
+        if ($Destination -ne '.') {
+            throw "Unexpected argument: $argumentText"
+        }
+        $Destination = $argumentText
+    }
 
-    if (-not $openssl) {
+    $age = Get-Command age -ErrorAction SilentlyContinue
+
+    if (-not $age) {
         throw @"
-OpenSSL was not found in PATH.
+age was not found in PATH.
 
-Install OpenSSL or ensure openssl.exe is available in PATH.
-You can verify it with:
-
-    openssl version
+Install age or ensure age.exe is available in PATH.
 "@
     }
 
@@ -475,27 +584,23 @@ You can verify it with:
     $preserveTransactionDirectory = $false
 
     try {
+        Write-Progress -Activity 'Unprotect-Tar' -Status '[1/4] Decrypting archive with age...' -PercentComplete 10
         Write-Verbose "Decrypting archive to temporary file: $temporaryTar"
 
-        # OpenSSL prompts:
-        # Enter decryption password:
-        & $openssl.Source enc `
-            -d `
-            -aes-256-cbc `
-            -pbkdf2 `
-            -iter 600000 `
-            -in $archiveItem.FullName `
-            -out $temporaryTar
+        $ageOutput = & $age.Source -d -o $temporaryTar $archiveItem.FullName 2>&1
 
         if ($LASTEXITCODE -ne 0) {
+            $ageText = ($ageOutput | ForEach-Object { $_.ToString() }) -join "`n"
             throw @"
-OpenSSL decryption failed with exit code $LASTEXITCODE.
+Decryption failed with exit code $LASTEXITCODE.
 
 The password may be incorrect, the file may be damaged, or the
-archive may have been created with different OpenSSL options.
+archive may have been created with different options.
+$ageText
 "@
         }
 
+        Write-Progress -Activity 'Unprotect-Tar' -Status '[2/4] Validating archive contents...' -PercentComplete 35
         Write-Verbose 'Validating archive entries.'
 
         $archiveEntries = @(& $tar.Source -tzf $temporaryTar)
@@ -504,17 +609,49 @@ archive may have been created with different OpenSSL options.
             throw "tar.exe could not read the archive (exit code $LASTEXITCODE)."
         }
 
+        $seenEntries = [Collections.Generic.HashSet[string]]::new(
+            [StringComparer]::OrdinalIgnoreCase
+        )
+        $topLevelEntries = [Collections.Generic.HashSet[string]]::new(
+            [StringComparer]::OrdinalIgnoreCase
+        )
         foreach ($entry in $archiveEntries) {
             $normalizedEntry = ([string] $entry).Replace('\', '/')
+            while ($normalizedEntry.StartsWith('./')) {
+                $normalizedEntry = $normalizedEntry.Substring(2)
+            }
+            $normalizedEntry = $normalizedEntry.TrimEnd('/')
             $segments = $normalizedEntry -split '/'
 
             if (
+                [string]::IsNullOrWhiteSpace($normalizedEntry) -or
                 $normalizedEntry.StartsWith('/') -or
                 $normalizedEntry -match '^[A-Za-z]:' -or
                 $segments -contains '..'
             ) {
                 throw "Unsafe archive entry: $entry"
             }
+
+            foreach ($segment in $segments) {
+                $baseName = ($segment -split '\.', 2)[0]
+                if (
+                    $segment -match '[\x00-\x1f<>:"|?*]' -or
+                    $segment.EndsWith(' ') -or
+                    $segment.EndsWith('.') -or
+                    $baseName -match '^(?i:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$'
+                ) {
+                    throw "Archive entry cannot be recreated on Windows: $entry"
+                }
+            }
+
+            if (-not $seenEntries.Add($normalizedEntry)) {
+                throw "Archive contains duplicate or case-colliding entry: $entry"
+            }
+            $null = $topLevelEntries.Add($segments[0])
+        }
+
+        if ($topLevelEntries.Count -ne 1) {
+            throw 'Archive must contain exactly one top-level item.'
         }
 
         # Member names alone do not reveal where symbolic and hard links point.
@@ -535,6 +672,9 @@ archive may have been created with different OpenSSL options.
             ) {
                 throw "Archive links are not supported: $detailText"
             }
+            if ($detailText -notmatch '^[-d]') {
+                throw "Archive member type is not supported: $detailText"
+            }
         }
 
         New-Item `
@@ -543,11 +683,25 @@ archive may have been created with different OpenSSL options.
             -ErrorAction Stop |
         Out-Null
 
+        Write-Progress -Activity 'Unprotect-Tar' -Status '[3/4] Extracting files...' -PercentComplete 50
         Write-Verbose "Extracting archive into staging directory: $stagingDirectory"
 
+        $totalEntries = $archiveEntries.Count
+        $extractCount = 0
+
         $tarExtractOutput = & $tar.Source `
-            -xzf $temporaryTar `
-            -C $stagingDirectory 2>&1
+            -xzvf $temporaryTar `
+            -C $stagingDirectory 2>&1 | ForEach-Object {
+            $line = $_.ToString()
+            if ($line -match '^x\s') {
+                $extractCount++
+                if ($totalEntries -gt 0) {
+                    $pct = [Math]::Min(100, [int](($extractCount / $totalEntries) * 100))
+                    Write-Progress -Activity 'Unprotect-Tar' -Status "[3/4] Extracting files: $pct% ($extractCount/$totalEntries)" -PercentComplete $pct
+                }
+            }
+            $_
+        }
 
         if ($LASTEXITCODE -ne 0) {
             $tarExtractText = ($tarExtractOutput | ForEach-Object { $_.ToString() }) -join "`n"
@@ -557,14 +711,11 @@ archive may have been created with different OpenSSL options.
             throw "tar.exe extraction failed with exit code $LASTEXITCODE."
         }
 
+        Write-Progress -Activity 'Unprotect-Tar' -Status '[4/4] Merging and finalizing destination...' -PercentComplete 90
+
         $destinationParent = Split-Path -Parent $destinationPath
         if (-not (Test-Path -LiteralPath $destinationParent -PathType Container)) {
-            New-Item `
-                -ItemType Directory `
-                -Path $destinationParent `
-                -Force `
-                -ErrorAction Stop |
-            Out-Null
+            throw "Destination parent directory does not exist: $destinationParent"
         }
 
         # Prepare every item on the destination volume before changing the
@@ -579,6 +730,9 @@ archive may have been created with different OpenSSL options.
             Out-Null
 
         $stagedItems = @(Get-ChildItem -LiteralPath $stagingDirectory -Force)
+        if ($stagedItems.Count -ne 1) {
+            throw 'Archive must contain exactly one top-level item.'
+        }
 
         if (-not $destinationExists) {
             $candidateDestination = Join-Path $transactionDirectory 'destination'
@@ -594,6 +748,19 @@ archive may have been created with different OpenSSL options.
             [IO.Directory]::Move($candidateDestination, $destinationPath)
         }
         else {
+            $collisions = @(
+                foreach ($stagedItem in $stagedItems) {
+                    $targetPath = Join-Path $destinationPath $stagedItem.Name
+                    Get-Item -LiteralPath $targetPath -Force -ErrorAction SilentlyContinue
+                }
+            )
+            if ($collisions.Count -gt 0 -and -not (Confirm-CustomShellArchiveCollision)) {
+                if ([Console]::IsInputRedirected) {
+                    throw 'Extraction target exists and confirmation requires an interactive terminal.'
+                }
+                throw 'Extraction cancelled; destination was not changed.'
+            }
+
             foreach ($stagedItem in $stagedItems) {
                 $targetPath = Join-Path $destinationPath $stagedItem.Name
                 $targetItem = Get-Item -LiteralPath $targetPath -Force -ErrorAction SilentlyContinue
@@ -707,11 +874,33 @@ Rollback errors: $($rollbackFailures -join '; ')
             }
         }
 
-        Write-Verbose 'Archive extracted successfully.'
+        if ($transactionDirectory) {
+            try {
+                Remove-Item -LiteralPath $transactionDirectory -Recurse -Force -ErrorAction Stop
+                $transactionDirectory = $null
+            }
+            catch {
+                $preserveTransactionDirectory = $true
+                throw "Extracted content was published, but transaction cleanup failed: $transactionDirectory"
+            }
+        }
 
+        try {
+            Remove-Item `
+                -LiteralPath $temporaryTar, $stagingDirectory `
+                -Recurse `
+                -Force `
+                -ErrorAction Stop
+        }
+        catch {
+            throw "Extracted content was published, but temporary file cleanup failed: $($_.Exception.Message)"
+        }
+
+        Write-Verbose 'Archive extracted successfully.'
         Get-ChildItem -LiteralPath $destinationPath -Force
     }
     finally {
+        Write-Progress -Activity 'Unprotect-Tar' -Completed
         Remove-Item `
             -LiteralPath $temporaryTar, $stagingDirectory `
             -Recurse `

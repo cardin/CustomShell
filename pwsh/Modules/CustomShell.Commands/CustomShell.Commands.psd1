@@ -3,7 +3,7 @@
 # root module prevents helper implementation details from becoming public APIs.
 @{
     RootModule        = 'CustomShell.Commands.psm1'
-    ModuleVersion     = '1.0.1'
+    ModuleVersion     = '2.0.0'
     GUID              = '71d73486-9d2c-49ad-a826-49f62b9d99f1'
     Author            = 'CustomShell contributors'
     Description       = 'Reusable PowerShell commands supplied by CustomShell.'

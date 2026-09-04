@@ -34,14 +34,9 @@ Append the following line to `~/.bashrc`:
 ## Commands
 
 - `Show-Help` displays the compact CustomShell command reference in both shells.
-- `Protect-Tar <source> [archive]` creates an encrypted tar archive.
-- `Unprotect-Tar <archive> [destination]` safely extracts one; the destination defaults to the current directory.
-- Pass `-h` to either archive command to display its usage and safety details.
+- `Protect-Tar` and `Unprotect-Tar` create and extract encrypted archives. See [Protect-Tar.md](docs/Protect-Tar.md) for usage, prerequisites, and specifications.
 - PowerShell also provides `Get-SSHConfig` for reading SSH host aliases.
 - `batx <file>` displays files with `bat` without line numbers when `bat` is installed.
-
-PowerShell and Linux use compatible archive formats. Replacement and extraction
-are staged, and unsafe paths and links are rejected.
 
 ## PowerShell tests
 
@@ -54,5 +49,5 @@ Invoke-Pester ./pwsh/Tests
 
 ## Project documentation
 
-- [Design and behavioral constraints](DESIGN.md)
+- [Specification](docs/)
 - [Contributor and coding-agent guidance](AGENTS.md)

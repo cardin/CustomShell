@@ -6,53 +6,53 @@
 # checkInstalled
 # Prints a compact warning for expected commands that are unavailable locally.
 checkInstalled() {
-    local missing=false
-    local missing_marker="󰬅"
-    if [[ ${UTF8_ENABLED:-false} != true || ${IS_BARE_TERMINAL:-false} == true ]]; then
-        missing_marker="missing:"
-    fi
-    local programs=("bat" "btop" "conda" "delta" "dos2unix" "fd" "fzf"
-        "node" "pipx" "progress" "rg" "shfmt" "tmux" "tree" "unzip" "zip" "zoxide")
+	local missing=false
+	local missing_marker="󰬅"
+	if [[ ${UTF8_ENABLED:-false} != true || ${IS_BARE_TERMINAL:-false} == true ]]; then
+		missing_marker="missing:"
+	fi
+	local programs=("age" "bat" "btop" "conda" "delta" "dos2unix" "fd" "fzf"
+		"node" "pipx" "progress" "rg" "shfmt" "tmux" "tree" "unzip" "zip" "zoxide")
 
-    if [[ "$IS_WSL" == false ]]; then
-        programs+=("lazygit" "lazydocker" "nvitop")
-    fi
+	if [[ "$IS_WSL" == false ]]; then
+		programs+=("lazygit" "lazydocker" "nvitop")
+	fi
 
-    local program pattern type_output
-    for program in "${programs[@]}"; do
-        pattern="${program} is /mnt/"
-        type_output="$(type "$program" 2>/dev/null)"
-        if [[ "$type_output" == "$pattern"* || -z "$type_output" ]]; then
-            echo -e -n "${Red}${missing_marker}${program} "
-            missing=true
-        fi
-    done
-    if [[ "$missing" == true ]]; then
-        echo -e "${Color_Off}"
-    fi
+	local program pattern type_output
+	for program in "${programs[@]}"; do
+		pattern="${program} is /mnt/"
+		type_output="$(type "$program" 2>/dev/null)"
+		if [[ "$type_output" == "$pattern"* || -z "$type_output" ]]; then
+			echo -e -n "${Red}${missing_marker}${program} "
+			missing=true
+		fi
+	done
+	if [[ "$missing" == true ]]; then
+		echo -e "${Color_Off}"
+	fi
 }
 
 # Show-Help
 # Displays a short reference for commonly used CustomShell and CLI commands.
 Show-Help() {
-    if [[ ${UTF8_ENABLED:-false} != true || ${IS_BARE_TERMINAL:-false} == true ]]; then
-        echo -e "${Blue}CustomShell commands${Color_Off}"
-        if [[ "$IS_WSL" == true ]]; then
-            echo "wcd / wpushd / cmd / release-ram / mirror-win-ssh"
-        fi
-        echo "Protect-Tar / Unprotect-Tar / list_cert_chain"
-        echo "z / zi / bat / tree / rg / fd / btop / ssh"
-        return
-    fi
+	if [[ ${UTF8_ENABLED:-false} != true || ${IS_BARE_TERMINAL:-false} == true ]]; then
+		echo -e "${Blue}CustomShell commands${Color_Off}"
+		if [[ "$IS_WSL" == true ]]; then
+			echo "wcd / wpushd / cmd / release-ram / mirror-win-ssh"
+		fi
+		echo "Protect-Tar / Unprotect-Tar / list_cert_chain"
+		echo "z / zi / bat / tree / rg / fd / btop / ssh"
+		return
+	fi
 
-    echo -e "$Blue󰗉󰗉󰗉 Show-Help 󰗉󰗉󰗉"
+	echo -e "$Blue󰗉󰗉󰗉 Show-Help 󰗉󰗉󰗉"
 
-    if [[ "$IS_WSL" == true ]]; then
-        echo -e "$Green•  wcd ~ / wpushd / cmd / dos2unix / release-ram / mirror-win-ssh / \$USERPROFILE"
-    else
-        echo -e "$Green• lazydocker 󰇙 lazygit 󰇙 nvitop"
-    fi
-    echo -e "$Green• conda / pipx / node
+	if [[ "$IS_WSL" == true ]]; then
+		echo -e "$Green•  wcd ~ / wpushd / cmd / dos2unix / release-ram / mirror-win-ssh / \$USERPROFILE"
+	else
+		echo -e "$Green• lazydocker 󰇙 lazygit 󰇙 nvitop"
+	fi
+	echo -e "$Green• conda / pipx / node
 • z[i] / bat / tree [-L] / [Un]Protect-Tar / list_cert_chain
 • btop / progress [-w -m]
 • df -hl .. / du -hl [--max-depth <int>] ..

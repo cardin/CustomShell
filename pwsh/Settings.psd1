@@ -5,6 +5,7 @@
     StartTimeoutSeconds = 1.0
     Prompt               = 'ohmyposh'
     RequiredCommands     = @(
+        'age'
         'bat'
         'conda'
         'delta'

@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Maintain CustomShell as defined in `DESIGN.md`. Read it before changing
+Maintain CustomShell as defined in `docs/`. Read it before changing
 behavior; this file contains only contribution guidance.
 
 ## Change guidance
@@ -37,6 +37,7 @@ Bash:
 find linux -type f -name '*.sh' -print0 | xargs -0 bash -n
 find linux -type f -name '*.sh' -print0 | xargs -0 shellcheck
 bash linux/Tests/Archive.Tests.sh
+bash linux/Tests/Archive.Interop.Tests.sh
 bash linux/Tests/Environment.Tests.sh
 bash linux/Tests/Startup.Tests.sh
 bash linux/Tests/Wsl.Tests.sh
@@ -49,6 +50,6 @@ Use the owning tool to validate changed files under `config/` when available.
 ## Completion
 
 - Update `README.md` for installation, prerequisites, or user-facing commands.
-- Update `DESIGN.md` when behavior, compatibility, supported environments, or
+- Update `docs/` when behavior, compatibility, supported environments, or
   known gaps change.
 - Report files changed, checks run or skipped, and compatibility impact.

@@ -1,47 +1,89 @@
 # Verifies protected archive replacement, cleanup, round trips, and traversal
-# rejection. The suite uses unique temporary directories and a local OpenSSL
+# rejection. The suite uses unique temporary directories and a local age
 # shim so it never prompts for credentials or contacts external services.
 $modulePath = Join-Path $PSScriptRoot '..\..\Modules\CustomShell.Commands\CustomShell.Commands.psd1'
 
-function New-MockOpenSsl {
+function New-MockAge {
     <#
     .SYNOPSIS
-    Creates a controllable OpenSSL command shim for archive tests.
+    Creates a controllable age command shim for archive tests.
 
     .DESCRIPTION
-    Writes a local command that copies the requested input to output, emulating
-    the file flow expected by the archive commands. An environment flag can
-    force a nonzero exit code for failure and preservation tests.
+    Writes a local command that wraps and unwraps the payload with an age header
+    and checksum, emulating the file flow and authentication expected by the
+    archive commands.
     #>
     param(
         [Parameter(Mandatory)]
         [string] $Directory
     )
 
-    $mockPath = Join-Path $Directory 'openssl.cmd'
+    $psScript = Join-Path $Directory 'mock_age.ps1'
+    @'
+param()
+$output = $null
+$mode = 'encrypt'
+$inputFile = $null
+$i = 0
+while ($i -lt $args.Count) {
+    if ($args[$i] -eq '-o') {
+        $output = $args[$i+1]
+        $i += 2
+    }
+    elseif ($args[$i] -eq '-p') {
+        $mode = 'encrypt'
+        $i++
+    }
+    elseif ($args[$i] -eq '-d') {
+        $mode = 'decrypt'
+        $i++
+    }
+    else {
+        $inputFile = $args[$i]
+        $i++
+    }
+}
+if ($env:MOCK_AGE_FAIL -eq '1') {
+    exit 9
+}
+if ($mode -eq 'encrypt') {
+    $bytes = [IO.File]::ReadAllBytes($inputFile)
+    $hasher = [Security.Cryptography.SHA256]::Create()
+    $hash = [BitConverter]::ToString($hasher.ComputeHash($bytes)).Replace('-', '').ToLowerInvariant()
+    $header = [Text.Encoding]::ASCII.GetBytes("age-encryption.org/v1`n$hash`n")
+    $outBytes = New-Object byte[] ($header.Length + $bytes.Length)
+    [Buffer]::BlockCopy($header, 0, $outBytes, 0, $header.Length)
+    [Buffer]::BlockCopy($bytes, 0, $outBytes, $header.Length, $bytes.Length)
+    [IO.File]::WriteAllBytes($output, $outBytes)
+    exit 0
+}
+elseif ($mode -eq 'decrypt') {
+    $data = [IO.File]::ReadAllBytes($inputFile)
+    $headerPrefix = [Text.Encoding]::ASCII.GetString($data, 0, [Math]::Min(22, $data.Length))
+    if ($headerPrefix -ne "age-encryption.org/v1`n") {
+        exit 1
+    }
+    if ($data.Length -lt 87) {
+        exit 1
+    }
+    $expHash = [Text.Encoding]::ASCII.GetString($data, 22, 64)
+    $body = New-Object byte[] ($data.Length - 87)
+    [Buffer]::BlockCopy($data, 87, $body, 0, $body.Length)
+    $hasher = [Security.Cryptography.SHA256]::Create()
+    $actHash = [BitConverter]::ToString($hasher.ComputeHash($body)).Replace('-', '').ToLowerInvariant()
+    if ($expHash -ne $actHash) {
+        exit 1
+    }
+    [IO.File]::WriteAllBytes($output, $body)
+    exit 0
+}
+'@ | Set-Content -LiteralPath $psScript -Encoding Ascii
+
+    $mockPath = Join-Path $Directory 'age.cmd'
     @'
 @echo off
-if "%MOCK_OPENSSL_FAIL%"=="1" exit /b 9
-set "input="
-set "output="
-:parse
-if "%~1"=="" goto copy
-if /I "%~1"=="-in" (
-  set "input=%~2"
-  shift
-  shift
-  goto parse
-)
-if /I "%~1"=="-out" (
-  set "output=%~2"
-  shift
-  shift
-  goto parse
-)
-shift
-goto parse
-:copy
-copy /y "%input%" "%output%" >nul
+if "%MOCK_AGE_FAIL%"=="1" exit /b 9
+pwsh.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0mock_age.ps1" %*
 exit /b %ERRORLEVEL%
 '@ | Set-Content -LiteralPath $mockPath -Encoding Ascii
 }
@@ -134,10 +176,10 @@ function New-TestTarGzip {
         $tarStream.Write((New-Object byte[] 1024), 0, 1024)
         $tarStream.Position = 0
 
-        $fileStream = [IO.File]::Create($Path)
+        $gzipMemStream = New-Object IO.MemoryStream
         try {
             $gzipStream = New-Object IO.Compression.GZipStream(
-                $fileStream,
+                $gzipMemStream,
                 [IO.Compression.CompressionMode]::Compress
             )
             try {
@@ -146,9 +188,18 @@ function New-TestTarGzip {
             finally {
                 $gzipStream.Dispose()
             }
+
+            $bytes = $gzipMemStream.ToArray()
+            $hasher = [Security.Cryptography.SHA256]::Create()
+            $hash = [BitConverter]::ToString($hasher.ComputeHash($bytes)).Replace('-', '').ToLowerInvariant()
+            $header = [Text.Encoding]::ASCII.GetBytes("age-encryption.org/v1`n$hash`n")
+            $outBytes = New-Object byte[] ($header.Length + $bytes.Length)
+            [Buffer]::BlockCopy($header, 0, $outBytes, 0, $header.Length)
+            [Buffer]::BlockCopy($bytes, 0, $outBytes, $header.Length, $bytes.Length)
+            [IO.File]::WriteAllBytes($Path, $outBytes)
         }
         finally {
-            $fileStream.Dispose()
+            $gzipMemStream.Dispose()
         }
     }
     finally {
@@ -171,45 +222,49 @@ Describe 'protected tar archives' {
         $unapprovedCommands.Count | Should Be 0
     }
 
-    It 'shows Protect-Tar help with -h without requiring a source' {
-        $helpText = Protect-Tar -h | Out-String
+    It 'shows Protect-Tar help with --help without requiring a source' {
+        $helpText = Protect-Tar --help | Out-String
 
         $helpText | Should Match 'USAGE'
-        $helpText | Should Match 'Protect-Tar <source_directory>'
-        $helpText | Should Match '600,000 iterations'
+        $helpText | Should Match 'Protect-Tar <source>'
+        $helpText | Should Match 'ChaCha20-Poly1305'
         $helpText | Should Match '--exclude'
     }
 
-    It 'shows Unprotect-Tar help with -h without requiring an archive' {
-        $helpText = Unprotect-Tar -h | Out-String
+    It 'shows Unprotect-Tar help with --help without requiring an archive' {
+        $helpText = Unprotect-Tar --help | Out-String
 
         $helpText | Should Match 'USAGE'
-        $helpText | Should Match 'Unprotect-Tar <archive.tar.gz.enc>'
-        $helpText | Should Match 'transactional extraction'
+        $helpText | Should Match 'Unprotect-Tar <archive.enc>'
+        $helpText | Should Match 'transactionally'
     }
 
     BeforeEach {
         $script:testRoot = Join-Path ([IO.Path]::GetTempPath()) "CustomShell.Tests-$([guid]::NewGuid())"
         $script:source = Join-Path $testRoot 'source'
         $script:mockBin = Join-Path $testRoot 'bin'
-        $script:archive = Join-Path $testRoot 'archive.enc'
+        $script:archiveBase = Join-Path $testRoot 'archive'
+        $script:archive = $null
         $script:originalPath = $env:PATH
         $script:originalPathExt = $env:PATHEXT
 
         New-Item -ItemType Directory -Path $source, $mockBin | Out-Null
         Set-Content -LiteralPath (Join-Path $source 'data.txt') -Value 'round trip payload'
-        New-MockOpenSsl -Directory $mockBin
+        New-MockAge -Directory $mockBin
         $env:PATHEXT = '.COM;.EXE;.BAT;.CMD'
         $env:PATH = "$mockBin;$originalPath"
-        Remove-Item Env:MOCK_OPENSSL_FAIL -ErrorAction SilentlyContinue
+        Remove-Item Env:MOCK_AGE_FAIL -ErrorAction SilentlyContinue
+        Mock Confirm-CustomShellArchiveCollision {
+            [bool] $global:CustomShellCollisionResponse
+        } -ModuleName CustomShell.Commands
     }
 
     AfterEach {
         $env:PATH = $originalPath
         $env:PATHEXT = $originalPathExt
-        Remove-Item Env:MOCK_OPENSSL_FAIL -ErrorAction SilentlyContinue
+        Remove-Item Env:MOCK_AGE_FAIL -ErrorAction SilentlyContinue
         Remove-Variable `
-            -Name CustomShellMoveCall, CustomShellPublishFailed `
+            -Name CustomShellMoveCall, CustomShellPublishFailed, CustomShellFailFinalMove, CustomShellCollisionResponse `
             -Scope Global `
             -ErrorAction SilentlyContinue
 
@@ -220,50 +275,34 @@ Describe 'protected tar archives' {
         }
     }
 
-    It 'preserves an existing archive when forced encryption fails' {
-        Set-Content -LiteralPath $archive -Value 'existing archive'
-        $env:MOCK_OPENSSL_FAIL = '1'
+    It 'does not publish an archive when encryption fails' {
+        $env:MOCK_AGE_FAIL = '1'
 
         $didThrow = $false
         try {
-            Protect-Tar -Source $source -Output $archive -Force | Out-Null
+            Protect-Tar -Source $source -Output $archiveBase | Out-Null
         }
         catch {
             $didThrow = $true
         }
 
         $didThrow | Should Be $true
-        (Get-Content -LiteralPath $archive -Raw).Trim() | Should Be 'existing archive'
+        @(Get-ChildItem -LiteralPath $testRoot -Filter 'archive_*.enc').Count | Should Be 0
     }
 
-    It 'reports helpful details when tar.exe fails due to symlink or stat errors' {
-        $mockTarPath = Join-Path $mockBin 'tar.cmd'
-        @'
-@echo off
-echo tar.exe: test/path: Cannot stat: Invalid argument 1>&2
-exit /b 1
-'@ | Set-Content -LiteralPath $mockTarPath -Encoding Ascii
+    It 'creates a timestamped authenticated archive' {
+        $archive = (Protect-Tar -Source $source -Output $archiveBase).FullName
 
-        $exceptionMessage = $null
-        try {
-            Protect-Tar -Source $source -Output $archive -Force | Out-Null
-        }
-        catch {
-            $exceptionMessage = $_.Exception.Message
-        }
-
-        $exceptionMessage | Should Match 'symbolic links or WSL reparse points'
-        $exceptionMessage | Should Match 'Cannot stat: Invalid argument'
+        [IO.Path]::GetFileName($archive) | Should Match '^archive_\d{8}_\d{6}\.enc$'
+        $magic = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($archive), 0, 21)
+        $magic | Should Be 'age-encryption.org/v1'
     }
 
-    It 'replaces an existing archive without leaving replacement files' {
-        Set-Content -LiteralPath $archive -Value 'existing archive'
+    It 'uses the source path as the default output base' {
+        $archive = (Protect-Tar -Source $source).FullName
 
-        Protect-Tar -Source $source -Output $archive -Force | Out-Null
-
-        (Get-Content -LiteralPath $archive -Raw).Trim() | Should Not Be 'existing archive'
-        @(Get-ChildItem -LiteralPath $testRoot -Force -File |
-            Where-Object Name -Match '\.(tmp|bak)$').Count | Should Be 0
+        [IO.Path]::GetFileName($archive) | Should Match '^source_\d{8}_\d{6}\.enc$'
+        Split-Path -Parent $archive | Should Be $testRoot
     }
 
     It 'omits patterns passed to -Exclude from the archive' {
@@ -273,8 +312,11 @@ exit /b 1
         Set-Content -LiteralPath (Join-Path $source 'drop.log') -Value 'drop me'
         $destination = Join-Path $testRoot 'restored'
 
-        Protect-Tar -Source $source -Output $archive -Exclude 'node_modules', '*.log' |
-            Out-Null
+        $archive = (Protect-Tar `
+            $source `
+            $archiveBase `
+            --exclude node_modules `
+            --exclude '*.log').FullName
         Unprotect-Tar -Archive $archive -Destination $destination | Out-Null
 
         Test-Path -LiteralPath (Join-Path $destination 'source\data.txt') | Should Be $true
@@ -282,36 +324,71 @@ exit /b 1
         Test-Path -LiteralPath (Join-Path $destination 'source\drop.log') | Should Be $false
     }
 
-    It 'preserves the backup when publishing and restoration both fail' {
-        Set-Content -LiteralPath $archive -Value 'existing archive'
-        $global:CustomShellMoveCall = 0
+    It 'recursively honors .tarignore files in the source tree' {
+        New-Item -ItemType Directory -Path (Join-Path $source 'nested') -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path $source '.tarignore') -Value "*.tmp`nignored_dir`n# comment"
+        Set-Content -LiteralPath (Join-Path $source 'nested\.tarignore') -Value 'sub_ignored.txt'
+        Set-Content -LiteralPath (Join-Path $source 'keep.txt') -Value 'keep me'
+        Set-Content -LiteralPath (Join-Path $source 'test.tmp') -Value 'ignore me'
+        Set-Content -LiteralPath (Join-Path $source 'nested\sub_keep.txt') -Value 'nested keep'
+        Set-Content -LiteralPath (Join-Path $source 'nested\sub_ignored.txt') -Value 'nested ignore'
+        New-Item -ItemType Directory -Path (Join-Path $source 'ignored_dir') -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path $source 'ignored_dir\data.txt') -Value 'deep ignore'
+        $destination = Join-Path $testRoot 'tarignore-restored'
 
+        $archive = (Protect-Tar $source $archiveBase).FullName
+        Unprotect-Tar -Archive $archive -Destination $destination | Out-Null
+
+        Test-Path -LiteralPath (Join-Path $destination 'source\keep.txt') | Should Be $true
+        Test-Path -LiteralPath (Join-Path $destination 'source\test.tmp') | Should Be $false
+        Test-Path -LiteralPath (Join-Path $destination 'source\nested\sub_keep.txt') | Should Be $true
+        Test-Path -LiteralPath (Join-Path $destination 'source\nested\sub_ignored.txt') | Should Be $false
+        Test-Path -LiteralPath (Join-Path $destination 'source\ignored_dir') | Should Be $false
+    }
+
+    It 'includes .tarignore-matched files when --no-ignore is passed' {
+        New-Item -ItemType Directory -Path (Join-Path $source 'nested') -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path $source '.tarignore') -Value "*.tmp`nignored_dir`n# comment"
+        Set-Content -LiteralPath (Join-Path $source 'nested\.tarignore') -Value 'sub_ignored.txt'
+        Set-Content -LiteralPath (Join-Path $source 'keep.txt') -Value 'keep me'
+        Set-Content -LiteralPath (Join-Path $source 'test.tmp') -Value 'ignore me'
+        Set-Content -LiteralPath (Join-Path $source 'nested\sub_keep.txt') -Value 'nested keep'
+        Set-Content -LiteralPath (Join-Path $source 'nested\sub_ignored.txt') -Value 'nested ignore'
+        New-Item -ItemType Directory -Path (Join-Path $source 'ignored_dir') -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path $source 'ignored_dir\data.txt') -Value 'deep ignore'
+        $destination = Join-Path $testRoot 'noignore-restored'
+
+        $archive = (Protect-Tar $source $archiveBase --no-ignore).FullName
+        Unprotect-Tar -Archive $archive -Destination $destination | Out-Null
+
+        Test-Path -LiteralPath (Join-Path $destination 'source\keep.txt') | Should Be $true
+        Test-Path -LiteralPath (Join-Path $destination 'source\test.tmp') | Should Be $true
+        Test-Path -LiteralPath (Join-Path $destination 'source\nested\sub_keep.txt') | Should Be $true
+        Test-Path -LiteralPath (Join-Path $destination 'source\nested\sub_ignored.txt') | Should Be $true
+        Test-Path -LiteralPath (Join-Path $destination 'source\ignored_dir\data.txt') | Should Be $true
+    }
+
+    It 'does not publish when the final move fails' {
+        $global:CustomShellFailFinalMove = $true
         Mock Move-CustomShellArchiveFile {
             param($SourcePath, $DestinationPath)
 
-            $global:CustomShellMoveCall++
-            if ($global:CustomShellMoveCall -gt 1) {
+            if ($global:CustomShellFailFinalMove) {
                 throw 'simulated move failure'
             }
-
             [IO.File]::Move($SourcePath, $DestinationPath)
         } -ModuleName CustomShell.Commands
 
         $didThrow = $false
         try {
-            Protect-Tar -Source $source -Output $archive -Force | Out-Null
+            Protect-Tar -Source $source -Output $archiveBase | Out-Null
         }
         catch {
             $didThrow = $true
         }
 
         $didThrow | Should Be $true
-        Test-Path -LiteralPath $archive | Should Be $false
-        $backups = @(Get-ChildItem -LiteralPath $testRoot -Force -File |
-            Where-Object Name -Match '\.bak$')
-        $backups.Count | Should Be 1
-        (Get-Content -LiteralPath $backups[0].FullName -Raw).Trim() |
-            Should Be 'existing archive'
+        @(Get-ChildItem -LiteralPath $testRoot -Filter 'archive_*.enc').Count | Should Be 0
         @(Get-ChildItem -LiteralPath $testRoot -Force -File |
             Where-Object Name -Match '\.tmp$').Count | Should Be 0
     }
@@ -319,7 +396,7 @@ exit /b 1
     It 'round-trips an archive into a new destination' {
         $destination = Join-Path $testRoot 'restored'
 
-        Protect-Tar -Source $source -Output $archive | Out-Null
+        $archive = (Protect-Tar -Source $source -Output $archiveBase).FullName
         $result = @(Unprotect-Tar -Archive $archive -Destination $destination)
 
         $restoredFile = Join-Path $destination 'source\data.txt'
@@ -328,11 +405,64 @@ exit /b 1
         $result[0].Name | Should Be 'source'
     }
 
+    It 'round-trips a file input with its original name and type' {
+        $fileSource = Join-Path $testRoot 'input.txt'
+        $destination = Join-Path $testRoot 'file-restored'
+        Set-Content -LiteralPath $fileSource -Value 'file payload'
+
+        $archive = (Protect-Tar -Source $fileSource -Output $archiveBase).FullName
+        Unprotect-Tar -Archive $archive -Destination $destination | Out-Null
+
+        Test-Path -LiteralPath (Join-Path $destination 'input.txt') -PathType Leaf |
+            Should Be $true
+        (Get-Content -LiteralPath (Join-Path $destination 'input.txt') -Raw).Trim() |
+            Should Be 'file payload'
+    }
+
+    It 'rejects a modified authenticated archive before extraction' {
+        $destination = Join-Path $testRoot 'tampered-restored'
+        $archive = (Protect-Tar -Source $source -Output $archiveBase).FullName
+        $archiveBytes = [IO.File]::ReadAllBytes($archive)
+        $archiveBytes[80] = $archiveBytes[80] -bxor 1
+        [IO.File]::WriteAllBytes($archive, $archiveBytes)
+
+        $didThrow = $false
+        try {
+            Unprotect-Tar -Archive $archive -Destination $destination | Out-Null
+        }
+        catch {
+            $didThrow = $true
+        }
+
+        $didThrow | Should Be $true
+        Test-Path -LiteralPath $destination | Should Be $false
+    }
+
+    It 'rejects an invalid or non-age archive' {
+        $invalidArchive = Join-Path $testRoot 'invalid.enc'
+        $destination = Join-Path $testRoot 'invalid-restored'
+        Set-Content -LiteralPath $invalidArchive -Value 'not an age archive'
+
+        $didThrow = $false
+        try {
+            Unprotect-Tar `
+                -Archive $invalidArchive `
+                -Destination $destination |
+                Out-Null
+        }
+        catch {
+            $didThrow = $true
+        }
+
+        $didThrow | Should Be $true
+        Test-Path -LiteralPath $destination | Should Be $false
+    }
+
     It 'enumerates the current destination after extraction' {
         $destination = Join-Path $testRoot 'restored'
         New-Item -ItemType Directory -Path $destination | Out-Null
 
-        Protect-Tar -Source $source -Output $archive | Out-Null
+        $archive = (Protect-Tar -Source $source -Output $archiveBase).FullName
 
         Push-Location $destination
         try {
@@ -354,7 +484,8 @@ exit /b 1
         Set-Content -LiteralPath (Join-Path $existingSource 'data.txt') -Value 'old payload'
         Set-Content -LiteralPath (Join-Path $existingSource 'keep.txt') -Value 'keep me'
 
-        Protect-Tar -Source $source -Output $archive | Out-Null
+        $archive = (Protect-Tar -Source $source -Output $archiveBase).FullName
+        $global:CustomShellCollisionResponse = $true
         Unprotect-Tar -Archive $archive -Destination $destination | Out-Null
 
         (Get-Content -LiteralPath (Join-Path $existingSource 'data.txt') -Raw).Trim() |
@@ -363,14 +494,36 @@ exit /b 1
             Should Be 'keep me'
     }
 
+    It 'leaves a colliding destination unchanged when confirmation is declined' {
+        $destination = Join-Path $testRoot 'declined'
+        $existingSource = Join-Path $destination 'source'
+        New-Item -ItemType Directory -Path $existingSource | Out-Null
+        Set-Content -LiteralPath (Join-Path $existingSource 'data.txt') -Value 'existing payload'
+        $archive = (Protect-Tar -Source $source -Output $archiveBase).FullName
+        $global:CustomShellCollisionResponse = $false
+
+        $didThrow = $false
+        try {
+            Unprotect-Tar -Archive $archive -Destination $destination | Out-Null
+        }
+        catch {
+            $didThrow = $true
+        }
+
+        $didThrow | Should Be $true
+        (Get-Content -LiteralPath (Join-Path $existingSource 'data.txt') -Raw).Trim() |
+            Should Be 'existing payload'
+    }
+
     It 'rolls back an existing destination when publication fails' {
         $destination = Join-Path $testRoot 'restored'
         $existingSource = Join-Path $destination 'source'
         New-Item -ItemType Directory -Path $existingSource | Out-Null
         Set-Content -LiteralPath (Join-Path $existingSource 'data.txt') -Value 'existing payload'
         Set-Content -LiteralPath (Join-Path $existingSource 'keep.txt') -Value 'keep me'
-        Protect-Tar -Source $source -Output $archive | Out-Null
+        $archive = (Protect-Tar -Source $source -Output $archiveBase).FullName
         $global:CustomShellPublishFailed = $false
+        $global:CustomShellCollisionResponse = $true
 
         Mock Move-CustomShellArchiveItem {
             param($SourcePath, $DestinationPath)
@@ -408,6 +561,7 @@ exit /b 1
 
     It 'rejects archive entries that escape the destination' {
         $destination = Join-Path $testRoot 'restored'
+        $archive = Join-Path $testRoot 'unsafe.enc'
         New-TestTarGzip -Path $archive -EntryName '../escape.txt'
 
         $didThrow = $false
@@ -425,6 +579,7 @@ exit /b 1
 
     It 'rejects archive entries with external symbolic-link targets' {
         $destination = Join-Path $testRoot 'restored'
+        $archive = Join-Path $testRoot 'unsafe-link.enc'
         New-TestTarGzip `
             -Path $archive `
             -EntryName 'unsafe-link' `
@@ -446,6 +601,7 @@ exit /b 1
 
     It 'rejects archive hard-link entries' {
         $destination = Join-Path $testRoot 'restored'
+        $archive = Join-Path $testRoot 'unsafe-hard-link.enc'
         New-TestTarGzip `
             -Path $archive `
             -EntryName 'unsafe-hard-link' `
@@ -466,7 +622,7 @@ exit /b 1
     }
 
     It 'refuses a filesystem root as the extraction destination' {
-        Protect-Tar -Source $source -Output $archive | Out-Null
+        $archive = (Protect-Tar -Source $source -Output $archiveBase).FullName
         $rootPath = [IO.Path]::GetPathRoot($testRoot)
 
         $didThrow = $false

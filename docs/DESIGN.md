@@ -23,34 +23,23 @@ or change external configuration. Shared tool configuration lives under
   interoperability helpers are limited to WSL.
 - When `bat` is available, `batx` is the cross-shell shortcut for file output
   with header and grid decorations but no line numbers.
-- `Protect-Tar -h` and `Unprotect-Tar -h` display command usage and archive
-  safety details without checking dependencies or changing the filesystem.
 - Linux may configure Git credentials, manage a reusable `ssh-agent`, and
   regenerate CustomShell's `environment.d` file. PowerShell startup does not
   change global Git configuration.
 
 ## Compatibility and safety
 
-- Public command names, startup paths, archive formats, and cryptographic
-  parameters are compatibility surfaces. PowerShell and Linux archives use
-  AES-256-CBC with PBKDF2, salt, and 600,000 iterations.
-- `Protect-Tar` accepts repeatable glob exclude patterns (`-Exclude` on
-  PowerShell, `--exclude` on Bash) passed through to tar's `--exclude` option
-  on both platforms.
-- `Unprotect-Tar` accepts an optional destination directory and defaults to
-  the current directory on both platforms.
+- Public command names and startup paths are compatibility surfaces.
 - `Show-Help` is the cross-shell command-reference entry point. It replaces
   PowerShell's `Show-CustomShellHelp` and Bash's `manShell`.
+- `Protect-Tar` and `Unprotect-Tar` requirements and format specifications are
+  defined in [Protect-Tar.md](Protect-Tar.md).
 - Destructive operations must resolve narrow targets and reject broad or empty
-  paths. Archive extraction must reject traversal and link entries.
-- Replacement and extraction are transactional: failures preserve existing
-  data, with recoverable backups when automatic rollback cannot complete.
+  paths.
 - Secrets, passwords, certificates, and private key material must not be
   printed, logged, or committed.
 
 ## Known gaps
 
 - Most Bash helpers beyond startup and archives lack regression coverage.
-- Linux encrypted-archive passwords are supplied to OpenSSL through process
-  arguments rather than PowerShell-style secure prompting.
 - Device detection relies on a username heuristic.
