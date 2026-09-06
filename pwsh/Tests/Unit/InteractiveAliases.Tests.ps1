@@ -2,10 +2,9 @@
 # test operates in a unique temporary directory and confirms that protected broad
 # targets are rejected while narrow, explicitly supplied paths can be removed.
 
-$aliasScript = Join-Path $PSScriptRoot '..\..\Startup\Set-InteractiveAliases.ps1'
-
 Describe 'Remove-ItemTree' {
     BeforeAll {
+        $aliasScript = Join-Path $PSScriptRoot '..\..\Startup\Set-InteractiveAliases.ps1'
         . $aliasScript
     }
 
@@ -26,7 +25,7 @@ Describe 'Remove-ItemTree' {
     It 'removes an explicitly supplied narrow directory' {
         Remove-ItemTree -Path $testRoot -Confirm:$false
 
-        Test-Path -LiteralPath $testRoot | Should Be $false
+        Test-Path -LiteralPath $testRoot | Should -Be $false
     }
 
     It 'refuses to remove the filesystem root' {
@@ -40,13 +39,15 @@ Describe 'Remove-ItemTree' {
             $didThrow = $true
         }
 
-        $didThrow | Should Be $true
-        Test-Path -LiteralPath $testRoot | Should Be $true
+        $didThrow | Should -Be $true
+        Test-Path -LiteralPath $testRoot | Should -Be $true
     }
 }
 
 Describe 'batx' {
     BeforeAll {
+        $aliasScript = Join-Path $PSScriptRoot '..\..\Startup\Set-InteractiveAliases.ps1'
+
         function global:bat {
             $script:receivedBatArguments = @($args)
         }
@@ -62,6 +63,6 @@ Describe 'batx' {
     It 'forwards arguments to bat with compact decorations' {
         batx 'example.txt' '--plain'
 
-        ($receivedBatArguments -join '|') | Should Be '--style=header,grid|example.txt|--plain'
+        ($receivedBatArguments -join '|') | Should -Be '--style=header,grid|example.txt|--plain'
     }
 }

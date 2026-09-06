@@ -44,8 +44,8 @@ Get-Command Show-Help -ErrorAction Stop | Out-Null
         $powerShellPath = (Get-Process -Id $PID).Path
         $output = & $powerShellPath -NoLogo -NoProfile -Command $command 2>&1
 
-        $LASTEXITCODE | Should Be 0
-        @($output)[-1] | Should Be 'PROFILE_OK'
+        $LASTEXITCODE | Should -Be 0
+        @($output)[-1] | Should -Be 'PROFILE_OK'
     }
 
     It 'keeps the zoxide hook active after prompt initialization' {
@@ -96,7 +96,7 @@ if (`$promptOutput -notcontains 'ZOXIDE_HOOK') {
         $powerShellPath = (Get-Process -Id $PID).Path
         $output = & $powerShellPath -NoLogo -NoProfile -Command $command 2>&1
 
-        $LASTEXITCODE | Should Be 0
-        @($output)[-1] | Should Be 'ZOXIDE_PROMPT_OK'
+        $LASTEXITCODE | Should -Be 0
+        @($output)[-1] | Should -Be 'ZOXIDE_PROMPT_OK'
     }
 }

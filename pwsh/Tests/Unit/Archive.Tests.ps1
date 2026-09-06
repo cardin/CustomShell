@@ -1,9 +1,11 @@
 # Verifies protected archive replacement, cleanup, round trips, and traversal
 # rejection. The suite uses unique temporary directories and a local age
 # shim so it never prompts for credentials or contacts external services.
-$modulePath = Join-Path $PSScriptRoot '..\..\Modules\CustomShell.Commands\CustomShell.Commands.psd1'
+Describe 'protected tar archives' {
+    BeforeAll {
+        $modulePath = Join-Path $PSScriptRoot '..\..\Modules\CustomShell.Commands\CustomShell.Commands.psd1'
 
-function New-MockAge {
+        function New-MockAge {
     <#
     .SYNOPSIS
     Creates a controllable age command shim for archive tests.
@@ -207,8 +209,6 @@ function New-TestTarGzip {
     }
 }
 
-Describe 'protected tar archives' {
-    BeforeAll {
         Import-Module -Name $modulePath -Force
     }
 
@@ -219,24 +219,24 @@ Describe 'protected tar archives' {
                 Where-Object Verb -NotIn $approvedVerbs
         )
 
-        $unapprovedCommands.Count | Should Be 0
+        $unapprovedCommands.Count | Should -Be 0
     }
 
     It 'shows Protect-Tar help with --help without requiring a source' {
         $helpText = Protect-Tar --help | Out-String
 
-        $helpText | Should Match 'USAGE'
-        $helpText | Should Match 'Protect-Tar <source>'
-        $helpText | Should Match 'ChaCha20-Poly1305'
-        $helpText | Should Match '--exclude'
+        $helpText | Should -Match 'USAGE'
+        $helpText | Should -Match 'Protect-Tar <source>'
+        $helpText | Should -Match 'ChaCha20-Poly1305'
+        $helpText | Should -Match '--exclude'
     }
 
     It 'shows Unprotect-Tar help with --help without requiring an archive' {
         $helpText = Unprotect-Tar --help | Out-String
 
-        $helpText | Should Match 'USAGE'
-        $helpText | Should Match 'Unprotect-Tar <archive.enc>'
-        $helpText | Should Match 'transactionally'
+        $helpText | Should -Match 'USAGE'
+        $helpText | Should -Match 'Unprotect-Tar <archive.enc>'
+        $helpText | Should -Match 'transactionally'
     }
 
     BeforeEach {
@@ -286,23 +286,23 @@ Describe 'protected tar archives' {
             $didThrow = $true
         }
 
-        $didThrow | Should Be $true
-        @(Get-ChildItem -LiteralPath $testRoot -Filter 'archive_*.enc').Count | Should Be 0
+        $didThrow | Should -Be $true
+        @(Get-ChildItem -LiteralPath $testRoot -Filter 'archive_*.enc').Count | Should -Be 0
     }
 
     It 'creates a timestamped authenticated archive' {
         $archive = (Protect-Tar -Source $source -Output $archiveBase).FullName
 
-        [IO.Path]::GetFileName($archive) | Should Match '^archive_\d{8}_\d{6}\.enc$'
+        [IO.Path]::GetFileName($archive) | Should -Match '^archive_\d{8}_\d{6}\.enc$'
         $magic = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($archive), 0, 21)
-        $magic | Should Be 'age-encryption.org/v1'
+        $magic | Should -Be 'age-encryption.org/v1'
     }
 
     It 'uses the source path as the default output base' {
         $archive = (Protect-Tar -Source $source).FullName
 
-        [IO.Path]::GetFileName($archive) | Should Match '^source_\d{8}_\d{6}\.enc$'
-        Split-Path -Parent $archive | Should Be $testRoot
+        [IO.Path]::GetFileName($archive) | Should -Match '^source_\d{8}_\d{6}\.enc$'
+        Split-Path -Parent $archive | Should -Be $testRoot
     }
 
     It 'omits patterns passed to -Exclude from the archive' {
@@ -319,9 +319,9 @@ Describe 'protected tar archives' {
             --exclude '*.log').FullName
         Unprotect-Tar -Archive $archive -Destination $destination | Out-Null
 
-        Test-Path -LiteralPath (Join-Path $destination 'source\data.txt') | Should Be $true
-        Test-Path -LiteralPath (Join-Path $destination 'source\node_modules') | Should Be $false
-        Test-Path -LiteralPath (Join-Path $destination 'source\drop.log') | Should Be $false
+        Test-Path -LiteralPath (Join-Path $destination 'source\data.txt') | Should -Be $true
+        Test-Path -LiteralPath (Join-Path $destination 'source\node_modules') | Should -Be $false
+        Test-Path -LiteralPath (Join-Path $destination 'source\drop.log') | Should -Be $false
     }
 
     It 'recursively honors .tarignore files in the source tree' {
@@ -339,11 +339,11 @@ Describe 'protected tar archives' {
         $archive = (Protect-Tar $source $archiveBase).FullName
         Unprotect-Tar -Archive $archive -Destination $destination | Out-Null
 
-        Test-Path -LiteralPath (Join-Path $destination 'source\keep.txt') | Should Be $true
-        Test-Path -LiteralPath (Join-Path $destination 'source\test.tmp') | Should Be $false
-        Test-Path -LiteralPath (Join-Path $destination 'source\nested\sub_keep.txt') | Should Be $true
-        Test-Path -LiteralPath (Join-Path $destination 'source\nested\sub_ignored.txt') | Should Be $false
-        Test-Path -LiteralPath (Join-Path $destination 'source\ignored_dir') | Should Be $false
+        Test-Path -LiteralPath (Join-Path $destination 'source\keep.txt') | Should -Be $true
+        Test-Path -LiteralPath (Join-Path $destination 'source\test.tmp') | Should -Be $false
+        Test-Path -LiteralPath (Join-Path $destination 'source\nested\sub_keep.txt') | Should -Be $true
+        Test-Path -LiteralPath (Join-Path $destination 'source\nested\sub_ignored.txt') | Should -Be $false
+        Test-Path -LiteralPath (Join-Path $destination 'source\ignored_dir') | Should -Be $false
     }
 
     It 'includes .tarignore-matched files when --no-ignore is passed' {
@@ -361,11 +361,11 @@ Describe 'protected tar archives' {
         $archive = (Protect-Tar $source $archiveBase --no-ignore).FullName
         Unprotect-Tar -Archive $archive -Destination $destination | Out-Null
 
-        Test-Path -LiteralPath (Join-Path $destination 'source\keep.txt') | Should Be $true
-        Test-Path -LiteralPath (Join-Path $destination 'source\test.tmp') | Should Be $true
-        Test-Path -LiteralPath (Join-Path $destination 'source\nested\sub_keep.txt') | Should Be $true
-        Test-Path -LiteralPath (Join-Path $destination 'source\nested\sub_ignored.txt') | Should Be $true
-        Test-Path -LiteralPath (Join-Path $destination 'source\ignored_dir\data.txt') | Should Be $true
+        Test-Path -LiteralPath (Join-Path $destination 'source\keep.txt') | Should -Be $true
+        Test-Path -LiteralPath (Join-Path $destination 'source\test.tmp') | Should -Be $true
+        Test-Path -LiteralPath (Join-Path $destination 'source\nested\sub_keep.txt') | Should -Be $true
+        Test-Path -LiteralPath (Join-Path $destination 'source\nested\sub_ignored.txt') | Should -Be $true
+        Test-Path -LiteralPath (Join-Path $destination 'source\ignored_dir\data.txt') | Should -Be $true
     }
 
     It 'does not publish when the final move fails' {
@@ -387,10 +387,10 @@ Describe 'protected tar archives' {
             $didThrow = $true
         }
 
-        $didThrow | Should Be $true
-        @(Get-ChildItem -LiteralPath $testRoot -Filter 'archive_*.enc').Count | Should Be 0
+        $didThrow | Should -Be $true
+        @(Get-ChildItem -LiteralPath $testRoot -Filter 'archive_*.enc').Count | Should -Be 0
         @(Get-ChildItem -LiteralPath $testRoot -Force -File |
-            Where-Object Name -Match '\.tmp$').Count | Should Be 0
+            Where-Object Name -Match '\.tmp$').Count | Should -Be 0
     }
 
     It 'round-trips an archive into a new destination' {
@@ -400,9 +400,9 @@ Describe 'protected tar archives' {
         $result = @(Unprotect-Tar -Archive $archive -Destination $destination)
 
         $restoredFile = Join-Path $destination 'source\data.txt'
-        (Get-Content -LiteralPath $restoredFile -Raw).Trim() | Should Be 'round trip payload'
-        $result.Count | Should Be 1
-        $result[0].Name | Should Be 'source'
+        (Get-Content -LiteralPath $restoredFile -Raw).Trim() | Should -Be 'round trip payload'
+        $result.Count | Should -Be 1
+        $result[0].Name | Should -Be 'source'
     }
 
     It 'round-trips a file input with its original name and type' {
@@ -414,9 +414,9 @@ Describe 'protected tar archives' {
         Unprotect-Tar -Archive $archive -Destination $destination | Out-Null
 
         Test-Path -LiteralPath (Join-Path $destination 'input.txt') -PathType Leaf |
-            Should Be $true
+            Should -Be $true
         (Get-Content -LiteralPath (Join-Path $destination 'input.txt') -Raw).Trim() |
-            Should Be 'file payload'
+            Should -Be 'file payload'
     }
 
     It 'rejects a modified authenticated archive before extraction' {
@@ -434,8 +434,8 @@ Describe 'protected tar archives' {
             $didThrow = $true
         }
 
-        $didThrow | Should Be $true
-        Test-Path -LiteralPath $destination | Should Be $false
+        $didThrow | Should -Be $true
+        Test-Path -LiteralPath $destination | Should -Be $false
     }
 
     It 'rejects an invalid or non-age archive' {
@@ -454,8 +454,8 @@ Describe 'protected tar archives' {
             $didThrow = $true
         }
 
-        $didThrow | Should Be $true
-        Test-Path -LiteralPath $destination | Should Be $false
+        $didThrow | Should -Be $true
+        Test-Path -LiteralPath $destination | Should -Be $false
     }
 
     It 'enumerates the current destination after extraction' {
@@ -472,9 +472,9 @@ Describe 'protected tar archives' {
             Pop-Location
         }
 
-        $result.Count | Should Be 1
-        $result[0].Name | Should Be 'source'
-        $result[0].Parent.FullName | Should Be $destination
+        $result.Count | Should -Be 1
+        $result[0].Name | Should -Be 'source'
+        $result[0].Parent.FullName | Should -Be $destination
     }
 
     It 'merges into an existing directory while preserving unrelated files' {
@@ -489,9 +489,9 @@ Describe 'protected tar archives' {
         Unprotect-Tar -Archive $archive -Destination $destination | Out-Null
 
         (Get-Content -LiteralPath (Join-Path $existingSource 'data.txt') -Raw).Trim() |
-            Should Be 'round trip payload'
+            Should -Be 'round trip payload'
         (Get-Content -LiteralPath (Join-Path $existingSource 'keep.txt') -Raw).Trim() |
-            Should Be 'keep me'
+            Should -Be 'keep me'
     }
 
     It 'leaves a colliding destination unchanged when confirmation is declined' {
@@ -510,9 +510,9 @@ Describe 'protected tar archives' {
             $didThrow = $true
         }
 
-        $didThrow | Should Be $true
+        $didThrow | Should -Be $true
         (Get-Content -LiteralPath (Join-Path $existingSource 'data.txt') -Raw).Trim() |
-            Should Be 'existing payload'
+            Should -Be 'existing payload'
     }
 
     It 'rolls back an existing destination when publication fails' {
@@ -550,13 +550,15 @@ Describe 'protected tar archives' {
             $didThrow = $true
         }
 
-        $didThrow | Should Be $true
+        $didThrow | Should -Be $true
         (Get-Content -LiteralPath (Join-Path $existingSource 'data.txt') -Raw).Trim() |
-            Should Be 'existing payload'
+            Should -Be 'existing payload'
         (Get-Content -LiteralPath (Join-Path $existingSource 'keep.txt') -Raw).Trim() |
-            Should Be 'keep me'
+            Should -Be 'keep me'
         @(Get-ChildItem -LiteralPath $testRoot -Force -Directory |
-            Where-Object Name -Match '^\.customshell-decode-').Count | Should Be 0
+            Where-Object Name -Match '^\.customshell-decode-').Count | Should -Be 0
+        @(Get-ChildItem -LiteralPath $destination -Force -Directory |
+            Where-Object Name -Match '^\.customshell-decode-').Count | Should -Be 0
     }
 
     It 'rejects archive entries that escape the destination' {
@@ -572,9 +574,9 @@ Describe 'protected tar archives' {
             $didThrow = $true
         }
 
-        $didThrow | Should Be $true
-        Test-Path -LiteralPath (Join-Path $testRoot 'escape.txt') | Should Be $false
-        Test-Path -LiteralPath $destination | Should Be $false
+        $didThrow | Should -Be $true
+        Test-Path -LiteralPath (Join-Path $testRoot 'escape.txt') | Should -Be $false
+        Test-Path -LiteralPath $destination | Should -Be $false
     }
 
     It 'rejects archive entries with external symbolic-link targets' {
@@ -594,9 +596,9 @@ Describe 'protected tar archives' {
             $didThrow = $true
         }
 
-        $didThrow | Should Be $true
-        Test-Path -LiteralPath $destination | Should Be $false
-        Test-Path -LiteralPath (Join-Path $testRoot 'escape.txt') | Should Be $false
+        $didThrow | Should -Be $true
+        Test-Path -LiteralPath $destination | Should -Be $false
+        Test-Path -LiteralPath (Join-Path $testRoot 'escape.txt') | Should -Be $false
     }
 
     It 'rejects archive hard-link entries' {
@@ -616,9 +618,9 @@ Describe 'protected tar archives' {
             $didThrow = $true
         }
 
-        $didThrow | Should Be $true
-        Test-Path -LiteralPath $destination | Should Be $false
-        Test-Path -LiteralPath (Join-Path $testRoot 'escape.txt') | Should Be $false
+        $didThrow | Should -Be $true
+        Test-Path -LiteralPath $destination | Should -Be $false
+        Test-Path -LiteralPath (Join-Path $testRoot 'escape.txt') | Should -Be $false
     }
 
     It 'refuses a filesystem root as the extraction destination' {
@@ -633,6 +635,6 @@ Describe 'protected tar archives' {
             $didThrow = $true
         }
 
-        $didThrow | Should Be $true
+        $didThrow | Should -Be $true
     }
 }

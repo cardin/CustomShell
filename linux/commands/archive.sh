@@ -386,7 +386,11 @@ EOF
 		fi
 		parent="$(realpath -e -- "$parent")" || return 1
 		dest="$parent/$dest_name"
-		staging="$(mktemp -d "$parent/.${dest_name}.stage.XXXXXX")" || return 1
+		if [[ -d "$dest" ]]; then
+			staging="$(mktemp -d "$dest/.${dest_name}.stage.XXXXXX")" || return 1
+		else
+			staging="$(mktemp -d "$parent/.${dest_name}.stage.XXXXXX")" || return 1
+		fi
 
 		local tar_status=0
 		if [[ -t 1 && "$total_entries" =~ ^[0-9]+$ && "$total_entries" -gt 0 ]]; then
@@ -423,7 +427,7 @@ EOF
 			return 1
 		fi
 		if [[ -d "$dest" ]]; then
-			transaction="$(mktemp -d "$parent/.${dest_name}.transaction.XXXXXX")" || return 1
+			transaction="$(mktemp -d "$dest/.${dest_name}.transaction.XXXXXX")" || return 1
 			local candidate="$transaction/candidate"
 			local backup="$transaction/backup"
 			mkdir -- "$candidate" "$backup" || return 1

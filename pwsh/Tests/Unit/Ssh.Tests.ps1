@@ -1,10 +1,9 @@
 # Verifies structured SSH configuration parsing through the public commands
 # module. Tests use temporary configuration files to cover multi-alias host
 # blocks, wildcard filtering, parsed fields, and missing-file behavior.
-$modulePath = Join-Path $PSScriptRoot '..\..\Modules\CustomShell.Commands\CustomShell.Commands.psd1'
-
 Describe 'Get-SSHConfig' {
     BeforeAll {
+        $modulePath = Join-Path $PSScriptRoot '..\..\Modules\CustomShell.Commands\CustomShell.Commands.psd1'
         Import-Module -Name $modulePath -Force
     }
 
@@ -34,19 +33,19 @@ Host *
 
         $result = @(Get-SSHConfig -ConfigPath $configPath)
 
-        $result.Count | Should Be 2
-        $result[0].Alias | Should Be 'alpha'
-        $result[1].Alias | Should Be 'beta'
+        $result.Count | Should -Be 2
+        $result[0].Alias | Should -Be 'alpha'
+        $result[1].Alias | Should -Be 'beta'
         foreach ($entry in $result) {
-            $entry.HostName | Should Be 'example.test'
-            $entry.User | Should Be 'deploy'
-            $entry.Port | Should Be 2222
+            $entry.HostName | Should -Be 'example.test'
+            $entry.User | Should -Be 'deploy'
+            $entry.Port | Should -Be 2222
         }
     }
 
     It 'returns no entries when the SSH config is missing' {
         $result = @(Get-SSHConfig -ConfigPath $configPath 3>$null)
 
-        $result.Count | Should Be 0
+        $result.Count | Should -Be 0
     }
 }

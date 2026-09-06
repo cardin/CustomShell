@@ -721,9 +721,19 @@ $ageText
         # Prepare every item on the destination volume before changing the
         # destination. Existing directories are copied first so extraction keeps
         # its historical merge behavior without exposing a partially copied tree.
-        $transactionDirectory = Join-Path `
-            $destinationParent `
-            ".customshell-decode-$([guid]::NewGuid())"
+        # When the destination already exists the transaction lives inside it so
+        # only the destination needs to be writable; otherwise it lives beside
+        # the future destination so publishing stays an atomic same-volume move.
+        if ($destinationExists) {
+            $transactionDirectory = Join-Path `
+                $destinationPath `
+                ".customshell-decode-$([guid]::NewGuid())"
+        }
+        else {
+            $transactionDirectory = Join-Path `
+                $destinationParent `
+                ".customshell-decode-$([guid]::NewGuid())"
+        }
         $candidateRoot = Join-Path $transactionDirectory 'candidate'
         $backupRoot = Join-Path $transactionDirectory 'backup'
         New-Item -ItemType Directory -Path $candidateRoot, $backupRoot -ErrorAction Stop |

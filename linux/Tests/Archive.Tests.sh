@@ -234,6 +234,8 @@ unset -f mv
 	fail "Unprotect-Tar did not roll back the original destination"
 [[ -z "$(find "$test_root" -maxdepth 1 -name '.rollback-destination.*' -print -quit)" ]] ||
 	fail "failed extraction publication left staging or backup directories"
+[[ -z "$(find "$rollback_destination" -maxdepth 1 \( -name '.*.stage.*' -o -name '.*.transaction.*' \) -print -quit)" ]] ||
+	fail "failed extraction publication left staging or backup directories"
 
 failed_base="$test_root/failed"
 AGE_FAIL=true Protect-Tar \
