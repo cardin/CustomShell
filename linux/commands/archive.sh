@@ -428,12 +428,11 @@ EOF
 		fi
 		if [[ -d "$dest" ]]; then
 			transaction="$(mktemp -d "$dest/.${dest_name}.transaction.XXXXXX")" || return 1
-			local candidate="$transaction/candidate"
 			local backup="$transaction/backup"
-			mkdir -- "$candidate" "$backup" || return 1
+			mkdir -- "$backup" || return 1
 
 			local -a item_names=() backed_up=() published=()
-			local staged_item item_name target_path candidate_path
+			local staged_item item_name target_path
 
 			local collision=false response
 			for staged_item in "${staged_items[@]}"; do
@@ -454,45 +453,108 @@ EOF
 				fi
 			fi
 
+			# The archive holds exactly one top-level item. Publish it with
+			# renames and a file-level merge so unrelated destination
+			# content is never copied: only archived entries are written.
+			local publish_failed=false publish_error="" index
 			for staged_item in "${staged_items[@]}"; do
 				item_name="${staged_item##*/}"
 				target_path="$dest/$item_name"
-				candidate_path="$candidate/$item_name"
-
-				if [[ -d "$target_path" && ! -L "$target_path" && -d "$staged_item" && ! -L "$staged_item" ]]; then
-					mkdir -- "$candidate_path" || return 1
-					cp -a -- "$target_path/." "$candidate_path/" || return 1
-					cp -a -- "$staged_item/." "$candidate_path/" || return 1
-				else
-					cp -a -- "$staged_item" "$candidate/" || return 1
-				fi
 
 				item_names+=("$item_name")
 				backed_up+=(false)
 				published+=(false)
-			done
+				index=$((${#item_names[@]} - 1))
 
-			local publish_failed=false publish_error="" index
-			for index in "${!item_names[@]}"; do
-				item_name="${item_names[$index]}"
-				target_path="$dest/$item_name"
-				candidate_path="$candidate/$item_name"
-
-				if [[ -e "$target_path" || -L "$target_path" ]]; then
+				if [[ ! -e "$target_path" && ! -L "$target_path" ]]; then
+					# Fast path: nothing to merge, rename into place. Staging
+					# lives on the destination volume, so this is atomic.
+					if ! mv -- "$staged_item" "$target_path"; then
+						publish_error="Failed to publish extracted archive target: $target_path"
+						publish_failed=true
+						break
+					fi
+					published[index]=true
+				elif [[ -d "$target_path" && ! -L "$target_path" && -d "$staged_item" && ! -L "$staged_item" ]]; then
+					# Directory merge: back up only colliding entries, then
+					# overlay archived content. Unrelated existing entries
+					# stay in place and are never copied.
+					local backup_item="$backup/$item_name"
+					if ! mkdir -- "$backup_item"; then
+						publish_error="Failed to back up existing archive target: $target_path"
+						publish_failed=true
+						break
+					fi
+					local -a merge_new=() merge_backed=()
+					local merge_failed=false src rel dst bkp bkp_parent k
+					while IFS= read -r -d '' src; do
+						rel="${src#"$staged_item"/}"
+						dst="$target_path/$rel"
+						bkp="$backup_item/$rel"
+						if [[ -d "$src" && ! -L "$src" && -d "$dst" && ! -L "$dst" ]]; then
+							continue
+						fi
+						if [[ -e "$dst" || -L "$dst" ]]; then
+							bkp_parent="$(dirname -- "$bkp")"
+							if ! mkdir -p -- "$bkp_parent"; then
+								publish_error="Failed to back up existing archive target: $dst"
+								merge_failed=true
+								break
+							fi
+							if ! mv -- "$dst" "$bkp"; then
+								publish_error="Failed to back up existing archive target: $dst"
+								merge_failed=true
+								break
+							fi
+							merge_backed+=("$rel")
+						else
+							merge_new+=("$rel")
+						fi
+					done < <(find "$staged_item" -mindepth 1 -print0)
+					if [[ "$merge_failed" == true ]]; then
+						for ((k = ${#merge_backed[@]} - 1; k >= 0; k--)); do
+							rel="${merge_backed[$k]}"
+							mv -- "$backup_item/$rel" "$target_path/$rel" 2>/dev/null || true
+						done
+						publish_failed=true
+						break
+					fi
+					if ! cp -a -- "$staged_item/." "$target_path/"; then
+						publish_error="Failed to publish extracted archive target: $target_path"
+						for ((k = ${#merge_new[@]} - 1; k >= 0; k--)); do
+							rm -rf -- "${target_path:?}/${merge_new[$k]}" 2>/dev/null || true
+						done
+						local merge_rollback_failed=false
+						for ((k = ${#merge_backed[@]} - 1; k >= 0; k--)); do
+							rel="${merge_backed[$k]}"
+							rm -rf -- "${target_path:?}/$rel" 2>/dev/null || true
+							if ! mv -- "$backup_item/$rel" "$target_path/$rel"; then
+								merge_rollback_failed=true
+							fi
+						done
+						if [[ "$merge_rollback_failed" == true ]]; then
+							preserve_transaction=true
+							echo "Error: $publish_error; rollback was incomplete. Original data is preserved under: $backup"
+						else
+							echo "Error: $publish_error; the original destination content was restored."
+						fi
+						return 1
+					fi
+				else
+					# Type conflict: replace via renames, no data copy.
 					if ! mv -- "$target_path" "$backup/$item_name"; then
 						publish_error="Failed to back up existing archive target: $target_path"
 						publish_failed=true
 						break
 					fi
 					backed_up[index]=true
+					if ! mv -- "$staged_item" "$target_path"; then
+						publish_error="Failed to publish extracted archive target: $target_path"
+						publish_failed=true
+						break
+					fi
+					published[index]=true
 				fi
-
-				if ! mv -- "$candidate_path" "$target_path"; then
-					publish_error="Failed to publish extracted archive target: $target_path"
-					publish_failed=true
-					break
-				fi
-				published[index]=true
 			done
 
 			if [[ "$publish_failed" == true ]]; then
@@ -525,6 +587,7 @@ EOF
 				echo "Error: Extracted content was published, but transaction cleanup failed: $transaction" >&2
 				return 1
 			fi
+
 		else
 			if ! mv -- "$staging" "$dest"; then
 				echo "Error: Failed to publish extracted content."

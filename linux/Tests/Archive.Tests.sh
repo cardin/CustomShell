@@ -213,25 +213,32 @@ printf 'y\n' | script -qfec \
 	fail "Unprotect-Tar removed unrelated destination content"
 
 rollback_destination="$test_root/rollback-destination"
-mkdir -p "$rollback_destination"
+mkdir -p "$rollback_destination/source"
 echo "original" >"$rollback_destination/original.txt"
+echo "existing" >"$rollback_destination/source/content.txt"
+echo "keep" >"$rollback_destination/source/keep.txt"
 
-# mv
-# Injects a publication failure while allowing item backup and rollback renames.
-mv() {
-	local arguments=("$@")
-	local source_path="${arguments[${#arguments[@]} - 2]}"
-	local destination_path="${arguments[${#arguments[@]} - 1]}"
-	if [[ "$source_path" == *".transaction."*"/candidate/source" && "$destination_path" == "$rollback_destination/source" ]]; then
+# cp
+# Injects a publication failure during the directory merge overlay while
+# allowing backup renames, so rollback must restore the moved entries.
+cp() {
+	if [[ "$*" == *"$rollback_destination/source"* ]]; then
 		return 1
 	fi
-	command mv "$@"
+	command cp "$@"
 }
-Unprotect-Tar "$archive" "$rollback_destination" \
-	>/dev/null 2>&1 && fail "Unprotect-Tar succeeded when publication failed"
-unset -f mv
+# Export so the mock survives the pty child process spawned by script(1).
+export -f cp
+printf 'y\n' | script -qfec \
+	"source '$PROJ_DIR/linux/commands/archive.sh'; Unprotect-Tar '$archive' '$rollback_destination'" \
+	/dev/null >/dev/null 2>&1 && fail "Unprotect-Tar succeeded when publication failed"
+unset -f cp
 [[ "$(<"$rollback_destination/original.txt")" == "original" ]] ||
 	fail "Unprotect-Tar did not roll back the original destination"
+[[ "$(<"$rollback_destination/source/content.txt")" == "existing" ]] ||
+	fail "Unprotect-Tar did not restore the merged file"
+[[ "$(<"$rollback_destination/source/keep.txt")" == "keep" ]] ||
+	fail "Unprotect-Tar removed unrelated destination content during rollback"
 [[ -z "$(find "$test_root" -maxdepth 1 -name '.rollback-destination.*' -print -quit)" ]] ||
 	fail "failed extraction publication left staging or backup directories"
 [[ -z "$(find "$rollback_destination" -maxdepth 1 \( -name '.*.stage.*' -o -name '.*.transaction.*' \) -print -quit)" ]] ||

@@ -718,12 +718,13 @@ $ageText
             throw "Destination parent directory does not exist: $destinationParent"
         }
 
-        # Prepare every item on the destination volume before changing the
-        # destination. Existing directories are copied first so extraction keeps
-        # its historical merge behavior without exposing a partially copied tree.
-        # When the destination already exists the transaction lives inside it so
-        # only the destination needs to be writable; otherwise it lives beside
-        # the future destination so publishing stays an atomic same-volume move.
+        # Prepare the transaction on the destination volume before changing the
+        # destination. Publication uses renames and a file-level merge so only
+        # archived entries are written; unrelated destination content is never
+        # copied. When the destination already exists the transaction lives
+        # inside it so only the destination needs to be writable; otherwise it
+        # lives beside the future destination so publishing stays an atomic
+        # same-volume move.
         if ($destinationExists) {
             $transactionDirectory = Join-Path `
                 $destinationPath `
@@ -734,9 +735,8 @@ $ageText
                 $destinationParent `
                 ".customshell-decode-$([guid]::NewGuid())"
         }
-        $candidateRoot = Join-Path $transactionDirectory 'candidate'
         $backupRoot = Join-Path $transactionDirectory 'backup'
-        New-Item -ItemType Directory -Path $candidateRoot, $backupRoot -ErrorAction Stop |
+        New-Item -ItemType Directory -Path $backupRoot -ErrorAction Stop |
             Out-Null
 
         $stagedItems = @(Get-ChildItem -LiteralPath $stagingDirectory -Force)
@@ -771,66 +771,83 @@ $ageText
                 throw 'Extraction cancelled; destination was not changed.'
             }
 
-            foreach ($stagedItem in $stagedItems) {
-                $targetPath = Join-Path $destinationPath $stagedItem.Name
-                $targetItem = Get-Item -LiteralPath $targetPath -Force -ErrorAction SilentlyContinue
-
-                if (
-                    $targetItem -and
-                    $targetItem.PSIsContainer -and
-                    $stagedItem.PSIsContainer -and
-                    -not ($targetItem.Attributes -band [IO.FileAttributes]::ReparsePoint)
-                ) {
-                    Copy-Item `
-                        -LiteralPath $targetItem.FullName `
-                        -Destination $candidateRoot `
-                        -Recurse `
-                        -Force `
-                        -ErrorAction Stop
-
-                    Get-ChildItem -LiteralPath $stagedItem.FullName -Force |
-                        Copy-Item `
-                            -Destination (Join-Path $candidateRoot $stagedItem.Name) `
-                            -Recurse `
-                            -Force `
-                            -ErrorAction Stop
-                }
-                else {
-                    Copy-Item `
-                        -LiteralPath $stagedItem.FullName `
-                        -Destination $candidateRoot `
-                        -Recurse `
-                        -Force `
-                        -ErrorAction Stop
-                }
-            }
-
             $publishStates = [Collections.Generic.List[object]]::new()
 
             try {
                 foreach ($stagedItem in $stagedItems) {
                     $targetPath = Join-Path $destinationPath $stagedItem.Name
-                    $candidatePath = Join-Path $candidateRoot $stagedItem.Name
                     $backupPath = Join-Path $backupRoot $stagedItem.Name
+                    $targetItem = Get-Item -LiteralPath $targetPath -Force -ErrorAction SilentlyContinue
                     $state = [pscustomobject]@{
-                        TargetPath = $targetPath
-                        BackupPath = $backupPath
-                        BackedUp   = $false
-                        Published  = $false
+                        TargetPath  = $targetPath
+                        BackupPath  = $backupPath
+                        BackedUp    = $false
+                        Published   = $false
+                        Merged      = $false
+                        MergeNew    = [Collections.Generic.List[string]]::new()
+                        MergeBacked = [Collections.Generic.List[string]]::new()
                     }
                     $publishStates.Add($state)
 
-                    if (Test-Path -LiteralPath $targetPath) {
+                    if (-not $targetItem) {
+                        Move-CustomShellArchiveItem `
+                            -SourcePath $stagedItem.FullName `
+                            -DestinationPath $targetPath
+                        $state.Published = $true
+                    }
+                    elseif (
+                        $targetItem.PSIsContainer -and
+                        $stagedItem.PSIsContainer -and
+                        -not ($targetItem.Attributes -band [IO.FileAttributes]::ReparsePoint)
+                    ) {
+                        New-Item -ItemType Directory -Path $backupPath -ErrorAction Stop |
+                            Out-Null
+                        $stagedChildren = @(Get-ChildItem -LiteralPath $stagedItem.FullName -Recurse -Force)
+                        foreach ($child in $stagedChildren) {
+                            $relativePath = $child.FullName.Substring($stagedItem.FullName.Length + 1)
+                            $childTarget = Join-Path $targetPath $relativePath
+                            $childBackup = Join-Path $backupPath $relativePath
+                            $childTargetItem = Get-Item -LiteralPath $childTarget -Force -ErrorAction SilentlyContinue
+                            $childIsDir = $child.PSIsContainer -and -not ($child.Attributes -band [IO.FileAttributes]::ReparsePoint)
+                            $targetIsDir = $childTargetItem -and $childTargetItem.PSIsContainer -and -not ($childTargetItem.Attributes -band [IO.FileAttributes]::ReparsePoint)
+                            if ($childIsDir -and $targetIsDir) {
+                                continue
+                            }
+                            if ($childTargetItem) {
+                                $childBackupParent = Split-Path -Parent $childBackup
+                                if (-not (Test-Path -LiteralPath $childBackupParent)) {
+                                    New-Item -ItemType Directory -Path $childBackupParent -ErrorAction Stop |
+                                        Out-Null
+                                }
+                                Move-CustomShellArchiveItem `
+                                    -SourcePath $childTarget `
+                                    -DestinationPath $childBackup
+                                $state.MergeBacked.Add($relativePath)
+                            }
+                            else {
+                                $state.MergeNew.Add($relativePath)
+                            }
+                        }
+
+                        $state.Merged = $true
+                        Get-ChildItem -LiteralPath $stagedItem.FullName -Force |
+                            Copy-Item `
+                                -Destination $targetPath `
+                                -Recurse `
+                                -Force `
+                                -ErrorAction Stop
+                    }
+                    else {
                         Move-CustomShellArchiveItem `
                             -SourcePath $targetPath `
                             -DestinationPath $backupPath
                         $state.BackedUp = $true
-                    }
 
-                    Move-CustomShellArchiveItem `
-                        -SourcePath $candidatePath `
-                        -DestinationPath $targetPath
-                    $state.Published = $true
+                        Move-CustomShellArchiveItem `
+                            -SourcePath $stagedItem.FullName `
+                            -DestinationPath $targetPath
+                        $state.Published = $true
+                    }
                 }
             }
             catch {
@@ -839,6 +856,47 @@ $ageText
 
                 for ($index = $publishStates.Count - 1; $index -ge 0; $index--) {
                     $state = $publishStates[$index]
+
+                    if ($state.Merged) {
+                        $orderedNew = @($state.MergeNew | Sort-Object -Property Length -Descending)
+                        foreach ($relativePath in $orderedNew) {
+                            $newPath = Join-Path $state.TargetPath $relativePath
+                            try {
+                                if (Test-Path -LiteralPath $newPath) {
+                                    Remove-Item `
+                                        -LiteralPath $newPath `
+                                        -Recurse `
+                                        -Force `
+                                        -ErrorAction Stop
+                                }
+                            }
+                            catch {
+                                $rollbackFailures.Add($_.Exception.Message)
+                            }
+                        }
+
+                        for ($mergeIndex = $state.MergeBacked.Count - 1; $mergeIndex -ge 0; $mergeIndex--) {
+                            $relativePath = $state.MergeBacked[$mergeIndex]
+                            $restoreTarget = Join-Path $state.TargetPath $relativePath
+                            $restoreSource = Join-Path $state.BackupPath $relativePath
+                            try {
+                                if (Test-Path -LiteralPath $restoreTarget) {
+                                    Remove-Item `
+                                        -LiteralPath $restoreTarget `
+                                        -Recurse `
+                                        -Force `
+                                        -ErrorAction Stop
+                                }
+                                Move-CustomShellArchiveItem `
+                                    -SourcePath $restoreSource `
+                                    -DestinationPath $restoreTarget
+                            }
+                            catch {
+                                $rollbackFailures.Add($_.Exception.Message)
+                            }
+                        }
+                        continue
+                    }
 
                     if ($state.Published -and (Test-Path -LiteralPath $state.TargetPath)) {
                         try {

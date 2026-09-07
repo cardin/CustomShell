@@ -522,24 +522,10 @@ function New-TestTarGzip {
         Set-Content -LiteralPath (Join-Path $existingSource 'data.txt') -Value 'existing payload'
         Set-Content -LiteralPath (Join-Path $existingSource 'keep.txt') -Value 'keep me'
         $archive = (Protect-Tar -Source $source -Output $archiveBase).FullName
-        $global:CustomShellPublishFailed = $false
         $global:CustomShellCollisionResponse = $true
 
-        Mock Move-CustomShellArchiveItem {
-            param($SourcePath, $DestinationPath)
-
-            if (
-                -not $global:CustomShellPublishFailed -and
-                $SourcePath -match '[\\/]candidate[\\/]'
-            ) {
-                $global:CustomShellPublishFailed = $true
-                throw 'simulated publication failure'
-            }
-
-            Move-Item `
-                -LiteralPath $SourcePath `
-                -Destination $DestinationPath `
-                -ErrorAction Stop
+        Mock Copy-Item {
+            throw 'simulated publication failure'
         } -ModuleName CustomShell.Commands
 
         $didThrow = $false
