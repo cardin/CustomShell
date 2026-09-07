@@ -32,8 +32,6 @@ or change external configuration. Shared tool configuration lives under
 - Public command names and startup paths are compatibility surfaces.
 - `Show-Help` is the cross-shell command-reference entry point. It replaces
   PowerShell's `Show-CustomShellHelp` and Bash's `manShell`.
-- `Protect-Tar` and `Unprotect-Tar` requirements and format specifications are
-  defined in [Protect-Tar.md](Protect-Tar.md).
 - Destructive operations must resolve narrow targets and reject broad or empty
   paths.
 - Secrets, passwords, certificates, and private key material must not be
