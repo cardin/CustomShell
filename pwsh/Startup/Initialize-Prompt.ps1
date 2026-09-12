@@ -13,6 +13,16 @@ switch ($customShellSettings.Prompt) {
 
         $env:STARSHIP_UPDATE_CHECK = 'false'
 
+        # Point Starship at the repository config instead of a user-level copy.
+        $starshipThemeName = if ($customShellState.IsStandaloneTerminal) {
+            'catppuccin-powerline.toml'
+        }
+        else {
+            'plain-text-symbols.toml'
+        }
+        $env:STARSHIP_CONFIG = [IO.Path]::GetFullPath(
+            (Join-Path $PSScriptRoot "../../config/starship/$starshipThemeName"))
+
         function global:Invoke-Starship-PreCommand {
             <#
             .SYNOPSIS

@@ -20,6 +20,13 @@ if [[ "$PRETTY_PROMPT" == ohmyposh && ${CUSTOMSHELL_OMP_INITIALIZED:-false} != t
 fi
 
 if [[ "$PRETTY_PROMPT" == starship && ${CUSTOMSHELL_STARSHIP_INITIALIZED:-false} != true ]] && command -v starship >/dev/null 2>&1; then
+    # Point Starship at the repository config instead of linking ~/.config.
+    if [[ "$IS_BARE_TERMINAL" == true ]]; then
+        export STARSHIP_CONFIG="$PROJ_DIR/config/starship/plain-text-symbols.toml"
+    else
+        export STARSHIP_CONFIG="$PROJ_DIR/config/starship/catppuccin-powerline.toml"
+    fi
+
     # set_win_title
     # Sets the terminal title to the basename of the current directory.
     set_win_title() {
