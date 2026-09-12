@@ -17,12 +17,15 @@ fail() {
 
 export HOME="$test_root/home"
 export GTK_OVERLAY_SCROLLING=0
+export UV_SYSTEM_CERTS=true
 mkdir -p "$HOME"
 environment_script="$(dirname "${BASH_SOURCE[0]}")/../startup/environment-d.sh"
 
+expected_content=$'GTK_OVERLAY_SCROLLING=0\nUV_SYSTEM_CERTS=true'
+
 source "$environment_script"
 environment_file="$HOME/.config/environment.d/90-customshell.conf"
-[[ "$(<"$environment_file")" == "GTK_OVERLAY_SCROLLING=0" ]] ||
+[[ "$(<"$environment_file")" == "$expected_content" ]] ||
     fail "environment.d content was not generated"
 
 original_inode="$(stat -c %i "$environment_file")"
@@ -36,7 +39,7 @@ mv() { return 1; }
 export GTK_OVERLAY_SCROLLING=1
 source "$environment_script"
 unset -f mv
-[[ "$(<"$environment_file")" == "GTK_OVERLAY_SCROLLING=0" ]] ||
+[[ "$(<"$environment_file")" == "$expected_content" ]] ||
     fail "failed publication changed the existing environment.d file"
 [[ -z "$(find "$(dirname "$environment_file")" -name '.90-customshell.conf.*' -print -quit)" ]] ||
     fail "failed publication left a temporary environment.d file"

@@ -39,6 +39,7 @@ find linux -type f -name '*.sh' -print0 | xargs -0 shellcheck
 bash linux/Tests/Archive.Tests.sh
 bash linux/Tests/Archive.Interop.Tests.sh
 bash linux/Tests/Environment.Tests.sh
+bash linux/Tests/Install.Tests.sh
 bash linux/Tests/Startup.Tests.sh
 bash linux/Tests/Wsl.Tests.sh
 ```

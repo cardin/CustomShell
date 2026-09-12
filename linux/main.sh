@@ -18,7 +18,7 @@ source "$CUSTOMSHELL_LINUX_DIR/commands/certificates.sh"
 source "$CUSTOMSHELL_LINUX_DIR/commands/utilities.sh"
 
 if [[ "$IS_WSL" == true ]]; then
-    source "$CUSTOMSHELL_LINUX_DIR/platform/wsl.sh"
+	source "$CUSTOMSHELL_LINUX_DIR/platform/wsl.sh"
 fi
 
 source "$CUSTOMSHELL_LINUX_DIR/startup/certificates.sh"
@@ -26,8 +26,8 @@ source "$CUSTOMSHELL_LINUX_DIR/startup/desktop.sh"
 source "$CUSTOMSHELL_LINUX_DIR/integrations/tools.sh"
 
 if [[ $- == *i* ]]; then
-    source "$CUSTOMSHELL_LINUX_DIR/integrations/prompt.sh"
-    source "$CUSTOMSHELL_LINUX_DIR/ui/readline.sh"
+	source "$CUSTOMSHELL_LINUX_DIR/integrations/prompt.sh"
+	source "$CUSTOMSHELL_LINUX_DIR/ui/readline.sh"
 fi
 
 source "$CUSTOMSHELL_LINUX_DIR/startup/ssh-agent.sh"
@@ -35,10 +35,9 @@ source "$CUSTOMSHELL_LINUX_DIR/startup/git.sh"
 source "$CUSTOMSHELL_LINUX_DIR/startup/environment-d.sh"
 
 source "$CUSTOMSHELL_LINUX_DIR/ui/diagnostics.sh"
-if [[ $- == *i* && -z ${TMUX:-} && ${TERM:-dumb} != dumb && \
-    ${CUSTOMSHELL_SUPPRESS_STARTUP_OUTPUT:-false} != true && \
-    ${CUSTOMSHELL_DIAGNOSTICS_SHOWN:-false} != true ]]; then
-    checkInstalled
-    Show-Help
-    export CUSTOMSHELL_DIAGNOSTICS_SHOWN=true
+if [[ $- == *i* && -z ${TMUX:-} && ${TERM:-dumb} != dumb &&
+	${CUSTOMSHELL_SUPPRESS_STARTUP_OUTPUT:-false} != true &&
+	${CUSTOMSHELL_DIAGNOSTICS_SHOWN:-false} != true ]]; then
+	Show-Help
+	export CUSTOMSHELL_DIAGNOSTICS_SHOWN=true
 fi

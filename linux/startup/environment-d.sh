@@ -6,7 +6,7 @@
 customshell_env_dir="${HOME:?HOME is not set}/.config/environment.d"
 customshell_env_file="$customshell_env_dir/90-customshell.conf"
 customshell_file_envs=("REQUESTS_CA_BUNDLE" "NODE_EXTRA_CA_CERTS")
-customshell_value_envs=("GTK_OVERLAY_SCROLLING")
+customshell_value_envs=("GTK_OVERLAY_SCROLLING" "UV_SYSTEM_CERTS")
 customshell_env_tmp=""
 
 if mkdir -p -- "$customshell_env_dir" && \

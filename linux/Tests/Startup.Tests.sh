@@ -30,7 +30,7 @@ chmod +x "$test_root/home/.local/share/fnm/fnm"
 
 main_script="$(dirname "${BASH_SOURCE[0]}")/../main.sh"
 HOME="$test_root/home" USER=cardi-test PATH="$test_root/bin:$PATH" \
-    bash -u -c '
+	bash -u -c '
         source "$1"
         env_inode=$(stat -c %i "$HOME/.config/environment.d/90-customshell.conf")
         source "$1"
@@ -38,6 +38,7 @@ HOME="$test_root/home" USER=cardi-test PATH="$test_root/bin:$PATH" \
         declare -F Unprotect-Tar >/dev/null
         declare -F list_cert_chain >/dev/null
         declare -F Show-Help >/dev/null
+        declare -F checkInstalled >/dev/null && exit 1
         [[ "$IS_WORK_DEVICE" == false ]]
         [[ "$GTK_OVERLAY_SCROLLING" == 0 ]]
         [[ -f "$HOME/.config/environment.d/90-customshell.conf" ]]
@@ -48,8 +49,8 @@ HOME="$test_root/home" USER=cardi-test PATH="$test_root/bin:$PATH" \
         fnm_count=$(printf "%s" "$PATH" | tr ":" "\n" | grep -Fxc "$HOME/.local/share/fnm")
         [[ "$fnm_count" == 1 ]]
     ' bash "$main_script" || {
-        echo "FAIL: main.sh did not tolerate repeated sourcing" >&2
-        exit 1
-    }
+	echo "FAIL: main.sh did not tolerate repeated sourcing" >&2
+	exit 1
+}
 
 echo "Startup tests passed"

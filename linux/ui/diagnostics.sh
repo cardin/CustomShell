@@ -1,36 +1,7 @@
 #!/usr/bin/env bash
 
-# Defines interactive startup diagnostics and the compact CustomShell command
-# reference. The entry point decides whether their output should be displayed.
-
-# checkInstalled
-# Prints a compact warning for expected commands that are unavailable locally.
-checkInstalled() {
-	local missing=false
-	local missing_marker="󰬅"
-	if [[ ${UTF8_ENABLED:-false} != true || ${IS_BARE_TERMINAL:-false} == true ]]; then
-		missing_marker="missing:"
-	fi
-	local programs=("age" "bat" "btop" "conda" "delta" "dos2unix" "fd" "fzf"
-		"node" "pipx" "progress" "rg" "shfmt" "tmux" "tree" "unzip" "zip" "zoxide")
-
-	if [[ "$IS_WSL" == false ]]; then
-		programs+=("lazygit" "lazydocker" "nvitop")
-	fi
-
-	local program pattern type_output
-	for program in "${programs[@]}"; do
-		pattern="${program} is /mnt/"
-		type_output="$(type "$program" 2>/dev/null)"
-		if [[ "$type_output" == "$pattern"* || -z "$type_output" ]]; then
-			echo -e -n "${Red}${missing_marker}${program} "
-			missing=true
-		fi
-	done
-	if [[ "$missing" == true ]]; then
-		echo -e "${Color_Off}"
-	fi
-}
+# Defines the compact CustomShell command reference. The entry point decides
+# whether its output should be displayed.
 
 # Show-Help
 # Displays a short reference for commonly used CustomShell and CLI commands.

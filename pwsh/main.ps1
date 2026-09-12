@@ -36,7 +36,6 @@ $customShellState = [pscustomobject]@{
 }
 
 $customShellStartupFiles = @(
-    'Initialize-Environment.ps1'
     'Set-InteractiveAliases.ps1'
     'Initialize-Integrations.ps1'
     'Initialize-PSReadLine.ps1'

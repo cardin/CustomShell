@@ -1,33 +1,6 @@
-# Defines commands that summarize missing tools and commonly used CustomShell
-# helpers. Their startup output is emitted only for standalone terminals so
-# embedded and nested PowerShell sessions remain quiet.
-
-function global:Show-MissingShellCommand {
-    <#
-    .SYNOPSIS
-    Displays configured command names that are not currently available.
-
-    .DESCRIPTION
-    Checks each supplied name with PowerShell command discovery and prints a
-    single warning-style line when any are missing. By default it checks the
-    required-command list loaded from CustomShell settings.
-
-    .PARAMETER CommandName
-    Command names to check; defaults to the list in CustomShell settings.
-    #>
-    [CmdletBinding()]
-    param(
-        [string[]] $CommandName = $global:CustomShellSettings.RequiredCommands
-    )
-
-    $missingCommands = @($CommandName | Where-Object {
-            -not (Get-Command $_ -ErrorAction SilentlyContinue)
-        })
-
-    if ($missingCommands.Count -gt 0) {
-        Write-Host -ForegroundColor Red "Missing commands: $($missingCommands -join ', ')"
-    }
-}
+# Defines commands that summarize commonly used CustomShell helpers. Their
+# startup output is emitted only for standalone terminals so embedded and
+# nested PowerShell sessions remain quiet.
 
 function global:Show-Help {
     <#
@@ -42,7 +15,7 @@ function global:Show-Help {
     Write-Host -ForegroundColor Blue '=== Show-Help ==='
     Write-Host -ForegroundColor Green @'
 • conda / pipx / node
-• z / zi / batx / nvitop / Get-SSHConfig / [Un]protect-Tar
+• z / zi / bat / nvitop / Get-SSHConfig / [Un]protect-Tar
 • rg <regex> [--glob ..] [-t <py>] [--no-ignore] [--hidden] [--max-depth ..] 
     [-l] [-B|A|C <int>] [<path> ...]
 • fd <regex> [--glob ..] [-t d|f] [--no-ignore] [--hidden] [--max|min-depth ..] 
@@ -53,6 +26,5 @@ function global:Show-Help {
 }
 
 if ($customShellState.IsStandaloneTerminal) {
-    Show-MissingShellCommand
     Show-Help
 }

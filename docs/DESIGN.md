@@ -21,11 +21,40 @@ or change external configuration. Shared tool configuration lives under
   the final prompt function and remains active.
 - Platform-specific features activate only where supported; Windows
   interoperability helpers are limited to WSL.
-- When `bat` is available, `batx` is the cross-shell shortcut for file output
-  with header and grid decorations but no line numbers.
+- WSL-exposed commands are declared in `pwsh/Settings.psd1` (`WslCommands`) and
+  wrapped only when no native command exists. Arguments are forwarded to an
+  interactive login Bash through `wsl -e` with CustomShell's startup output
+  suppressed, so the command resolves from the user's own environment.
+- When `bat` is available, `config/bat.conf` supplies file output with header
+  and grid decorations but no line numbers across shells. On Windows the
+  installer persists `BAT_CONFIG_PATH` to that file; Linux startup exports it.
 - Linux may configure Git credentials, manage a reusable `ssh-agent`, and
   regenerate CustomShell's `environment.d` file. PowerShell startup does not
   change global Git configuration.
+
+## Setup and upgrades
+
+- `pwsh/Install.ps1` and `linux/install.sh` are the supported setup paths. They
+  are idempotent, safe to re-run, and removable via their uninstall mode.
+- Setup only wires the profile entry point, persists a small set of user
+  environment values, and installs configuration that the runtime does not
+  reference by repository path. It delegates all runtime mutation to existing
+  startup code and never installs packages or modifies secrets, SSH, CA, or Git
+  state.
+- Persistent environment values (currently `UV_SYSTEM_CERTS`) always win,
+  overwriting conflicts, and are recorded so uninstall can reverse them.
+- Persistent environment values are installer-owned on both platforms: Windows
+  writes the User environment scope; Linux exports them from the managed profile
+  block. Profile startup does not set them, so the former
+  `Initialize-Environment.ps1` startup path was removed.
+- Setup owns missing-required-command reporting: `pwsh/Install.ps1` and
+  `linux/install.sh` report unavailable expected commands on every run, so
+  profile startup performs no command discovery. `Show-Help` remains the startup
+  reminder.
+- Setup entry points stay thin; behavior lives in module files under
+  `linux/install/` and `pwsh/Install/` so each concern is independently
+  testable. Setup resolves every target from its own location and refuses to
+  modify unrecognized content or broad paths.
 
 ## Compatibility and safety
 
