@@ -19,8 +19,3 @@ where coreutils >nul 2>&1 && (
 )
 doskey pwsh=pwsh_x
 doskey powershell=pwsh_x
-
-:: If bat exists
-where bat >nul 2>&1 && (
-    doskey batx=bat --style=header,grid $*
-)

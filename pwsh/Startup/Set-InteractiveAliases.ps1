@@ -162,18 +162,3 @@ if (
 
     Set-Alias -Name codex -Value Invoke-CodexInWsl -Scope Global -Force
 }
-
-# Batcat
-if (Get-Command bat -ErrorAction SilentlyContinue) {
-    function global:batx {
-        <#
-        .SYNOPSIS
-        Displays files with bat while omitting line numbers.
-
-        .DESCRIPTION
-        Invokes bat with its header and grid decorations while leaving out line
-        numbers. All additional arguments are passed directly to bat.
-        #>
-        bat --style='header,grid' @args
-    }
-}

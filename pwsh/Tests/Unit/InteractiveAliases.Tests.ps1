@@ -43,26 +43,3 @@ Describe 'Remove-ItemTree' {
         Test-Path -LiteralPath $testRoot | Should -Be $true
     }
 }
-
-Describe 'batx' {
-    BeforeAll {
-        $aliasScript = Join-Path $PSScriptRoot '..\..\Startup\Set-InteractiveAliases.ps1'
-
-        function global:bat {
-            $script:receivedBatArguments = @($args)
-        }
-
-        . $aliasScript
-    }
-
-    AfterAll {
-        Remove-Item -Path Function:\bat -ErrorAction SilentlyContinue
-        Remove-Item -Path Function:\batx -ErrorAction SilentlyContinue
-    }
-
-    It 'forwards arguments to bat with compact decorations' {
-        batx 'example.txt' '--plain'
-
-        ($receivedBatArguments -join '|') | Should -Be '--style=header,grid|example.txt|--plain'
-    }
-}
