@@ -17,5 +17,5 @@ where coreutils >nul 2>&1 && (
     doskey ll=dir $*
     doskey grep=findstrs
 )
-doskey pwsh=pwsh_x
-doskey powershell=pwsh_x
+doskey pwsh=pwsh_guest
+doskey powershell=pwsh_guest

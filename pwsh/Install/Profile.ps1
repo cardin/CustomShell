@@ -45,6 +45,24 @@ function Test-ProfileHasBlock {
     return ($bounds.Start -ge 0 -and $bounds.End -ge 0)
 }
 
+# Test-ProfileContentReferencesEntryPoint
+# Succeeds when profile text references the entry point, tolerating either path
+# separator so manual lines written with forward slashes are still detected.
+function Test-ProfileContentReferencesEntryPoint {
+    param(
+        [AllowNull()]
+        [AllowEmptyString()]
+        [string] $Content
+    )
+
+    if (-not $Content) {
+        return $false
+    }
+
+    $normalizedEntry = $entryScript.Replace('\', '/')
+    return $Content.Replace('\', '/').Contains($normalizedEntry)
+}
+
 # Test-ProfileHasUnmarkedSource
 # Succeeds when the entry point is referenced without a managed block.
 function Test-ProfileHasUnmarkedSource {
@@ -55,11 +73,28 @@ function Test-ProfileHasUnmarkedSource {
         return $false
     }
 
-    $content = Get-Content -LiteralPath $ProfilePath -Raw
-    if (-not $content) {
-        return $false
+    return (Test-ProfileContentReferencesEntryPoint -Content (
+            Get-Content -LiteralPath $ProfilePath -Raw -ErrorAction SilentlyContinue))
+}
+
+# Get-ConflictingProfilePaths
+# Returns other PowerShell profile files beside the target that also reference
+# the entry point. Loading both would run CustomShell startup twice.
+function Get-ConflictingProfilePaths {
+    $directory = Split-Path -Parent $ProfilePath
+    if (-not $directory -or -not (Test-Path -LiteralPath $directory)) {
+        return @()
     }
-    return $content.Contains($entryScript)
+
+    $target = [IO.Path]::GetFullPath($ProfilePath)
+    $conflicts = Get-ChildItem -LiteralPath $directory -Filter '*profile.ps1' -File -ErrorAction SilentlyContinue |
+        Where-Object {
+            $_.FullName -ne $target -and
+            (Test-ProfileContentReferencesEntryPoint -Content (
+                    Get-Content -LiteralPath $_.FullName -Raw -ErrorAction SilentlyContinue))
+        }
+
+    return @($conflicts | ForEach-Object { $_.FullName })
 }
 
 # Get-DesiredProfileLines
@@ -157,6 +192,10 @@ function Install-ProfileBlock {
     if (Test-ProfileHasUnmarkedSource) {
         Write-Warning "Skipped profile update: $ProfilePath already sources CustomShell without a managed block."
         return
+    }
+
+    foreach ($conflict in Get-ConflictingProfilePaths) {
+        Write-Warning "$conflict also sources CustomShell; remove that line to avoid duplicate startup output."
     }
 
     [void](Write-ProfileContent -Lines (Get-DesiredProfileLines -Action Write))

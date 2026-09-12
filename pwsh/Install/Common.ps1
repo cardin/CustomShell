@@ -97,13 +97,3 @@ function Install-ConfigFile {
 
     $Manifest.Value += $destination
 }
-
-# Get-ClinkSources
-# Returns the shipped Clink Lua scripts.
-function Get-ClinkSources {
-    $clinkDir = Join-Path $configDir 'clink'
-    if (-not (Test-Path -LiteralPath $clinkDir)) {
-        return @()
-    }
-    return @(Get-ChildItem -LiteralPath $clinkDir -Filter '*.lua' -File)
-}

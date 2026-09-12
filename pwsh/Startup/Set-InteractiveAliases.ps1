@@ -2,9 +2,9 @@
 # use. Optional command aliases are installed only when their backing tools are
 # available.
 
-if (Get-Command pwsh_x -ErrorAction SilentlyContinue) {
-    Set-Alias -Name pwsh -Value pwsh_x -Scope Global -Force
-    Set-Alias -Name powershell -Value pwsh_x -Scope Global -Force
+if (Get-Command pwsh_guest -ErrorAction SilentlyContinue) {
+    Set-Alias -Name pwsh -Value pwsh_guest -Scope Global -Force
+    Set-Alias -Name powershell -Value pwsh_guest -Scope Global -Force
 }
 
 # Prefer GNU Coreutils when it is installed. Its dispatcher is used only as a

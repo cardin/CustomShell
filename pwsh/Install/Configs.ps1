@@ -1,7 +1,7 @@
 # Shipped configuration-file installation. This file only defines functions and
 # is dot-sourced by pwsh/Install.ps1. The functions read the setup-scope
-# variables ($configDir, $EspansoMatchDir, $EspansoConfigDir, $ClinkScriptDir,
-# $manifestPath, $DryRun) established by the entry point.
+# variables ($configDir, $EspansoMatchDir, $EspansoConfigDir, $manifestPath,
+# $DryRun) established by the entry point.
 
 # Install-Configs
 # Installs every shipped configuration file and records the manifest.
@@ -12,10 +12,6 @@ function Install-Configs {
         -DestinationDir $EspansoMatchDir -Manifest ([ref]$manifest)
     Install-ConfigFile -Source (Join-Path $configDir 'espanso/whitelist.yml') `
         -DestinationDir $EspansoConfigDir -Manifest ([ref]$manifest)
-    foreach ($source in (Get-ClinkSources)) {
-        Install-ConfigFile -Source $source.FullName `
-            -DestinationDir $ClinkScriptDir -Manifest ([ref]$manifest)
-    }
 
     Save-ManifestEntries -Entries $manifest
 }
@@ -30,9 +26,6 @@ function Uninstall-Configs {
             (Join-Path $configDir 'espanso/whitelist.yml')
         )) {
         $sourcesByName[(Split-Path -Leaf $source)] = $source
-    }
-    foreach ($source in (Get-ClinkSources)) {
-        $sourcesByName[$source.Name] = $source.FullName
     }
 
     foreach ($entry in $entries) {
@@ -76,8 +69,5 @@ function Get-ExpectedConfigPaths {
         (Join-Path $EspansoMatchDir '_base.yml')
         (Join-Path $EspansoConfigDir 'whitelist.yml')
     )
-    foreach ($source in (Get-ClinkSources)) {
-        $paths += Join-Path $ClinkScriptDir $source.Name
-    }
     return $paths
 }

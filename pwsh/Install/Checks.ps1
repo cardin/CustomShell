@@ -51,6 +51,14 @@ function Invoke-Checks {
         $failures++
     }
 
+    $conflicts = @(Get-ConflictingProfilePaths)
+    if ($conflicts.Count -gt 0) {
+        foreach ($conflict in $conflicts) {
+            Write-Host "  profiles:   also sourced by $conflict - remove it"
+        }
+        $failures++
+    }
+
     $missing = @(Get-ExpectedConfigPaths | Where-Object { -not (Test-Path -LiteralPath $_) })
     if ($missing.Count -eq 0) {
         Write-Host '  configs:    installed'
@@ -59,6 +67,8 @@ function Invoke-Checks {
         Write-Host "  configs:    $($missing.Count) missing - run Install.ps1"
         $failures++
     }
+
+    $failures += Invoke-ClinkCheck
 
     $environmentValues = Get-PersistentEnvironment
     foreach ($name in $environmentValues.Keys) {
@@ -81,16 +91,20 @@ function Invoke-Checks {
         }
     }
 
-    if ($env:CONDA_PATH) {
-        if (Test-Path -LiteralPath (Join-Path $env:CONDA_PATH 'conda.exe') -PathType Leaf) {
-            Write-Host '  conda:      configured'
-        }
-        else {
-            Write-Host "  conda:      CONDA_PATH set but conda.exe missing: $env:CONDA_PATH"
-        }
+    if (Test-CondaPathConfigured) {
+        Write-Host "  conda:      configured ($env:CONDA_PATH)"
     }
     else {
-        Write-Host '  conda:      CONDA_PATH not set (optional)'
+        $condaPath = Get-CondaPath
+        if ($condaPath) {
+            Write-Host "  conda:      found at $condaPath but CONDA_PATH not set (optional)"
+        }
+        elseif ($env:CONDA_PATH) {
+            Write-Host "  conda:      CONDA_PATH set but conda.exe missing: $env:CONDA_PATH"
+        }
+        else {
+            Write-Host '  conda:      CONDA_PATH not set (optional)'
+        }
     }
 
     Write-Host "  prompt:     $($settings.Prompt)"

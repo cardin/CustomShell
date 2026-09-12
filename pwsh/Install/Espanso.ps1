@@ -2,10 +2,12 @@
 # dot-sourced by pwsh/Install.ps1.
 
 # Get-EspansoReportedConfigDir
-# Asks Espanso itself for its config directory. The daemon binary is tried as a
-# fallback because some launcher shims do not forward its output.
+# Asks Espanso itself for its config directory. Espanso's GUI launcher does not
+# emit its output to a plain `&` call, so the command is routed through cmd.exe.
+# The daemon binary is tried first, with the launcher command as a fallback for
+# installs that expose only `espanso`.
 function Get-EspansoReportedConfigDir {
-    foreach ($name in @('espanso', 'espansod')) {
+    foreach ($name in @('espansod', 'espanso')) {
         $command = Get-Command $name -ErrorAction SilentlyContinue
         if (-not $command) {
             continue
@@ -13,23 +15,10 @@ function Get-EspansoReportedConfigDir {
 
         $output = $null
         try {
-            $output = & $command.Source path config 2>$null
+            $output = & cmd.exe /c $command.Source path config 2>$null
         }
         catch {
             $output = $null
-        }
-        if (-not @($output | Where-Object { $_ -and $_.ToString().Trim() })) {
-            # Console-subsystem launchers can swallow the daemon's output when
-            # invoked directly; routing through cmd.exe captures it reliably.
-            try {
-                $output = & cmd.exe /c $command.Source path config 2>$null
-            }
-            catch {
-                $output = $null
-            }
-        }
-        if ($LASTEXITCODE -ne 0) {
-            continue
         }
 
         $line = $output | Where-Object { $_ -and $_.ToString().Trim() } | Select-Object -First 1

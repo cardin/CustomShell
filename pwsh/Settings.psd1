@@ -6,7 +6,6 @@
     StartTimeoutSeconds = 1.0
     Prompt               = 'ohmyposh'
     WslCommands          = @(
-        'codex'
         'opencode'
         'agent-deck'
     )

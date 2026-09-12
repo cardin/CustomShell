@@ -17,29 +17,34 @@ bash <repo>/linux/install.sh
 ## What the setup script does
 
 - Adds a marker-delimited block to the shell profile that sources the entry
-  point (`pwsh/main.ps1` or `linux/main.sh`). A stale block is updated in place;
-  an unmarked manual `source` line is reported and left untouched.
-- Sets `UV_SYSTEM_CERTS=true` persistently. uv defaults to bundled Mozilla root
-  certificates, so this opts into the platform certificate store. On Windows the
-  value is written to the User environment scope; on Linux it is exported from
-  the managed profile block and published to `environment.d` by runtime startup.
-- Sets `BAT_CONFIG_PATH` to the repository's `config/bat.conf` on Windows so
-  plain `bat` reads CustomShell's shared configuration. Linux startup exports the
-  same value from `linux/integrations/tools.sh`.
-- Installs shared tool configuration that the runtime does not reference by
-  repository path:
-  - Espanso: `config/espanso/_base.yml` is installed into `<root>/match` and
-    `config/espanso/whitelist.yml` into `<root>/config`, where `<root>` is the
-    directory Espanso reports for itself.
-  - Clink Lua scripts (`config/clink/*.lua`), Windows only.
-- Resolves the Espanso root by asking the tool (`espanso path config`, falling
-  back to `espansod path config`), then falls back to the platform default
-  (`%APPDATA%\espanso` on Windows, `${XDG_CONFIG_HOME:-~/.config}/espanso` on
-  Linux). The `-EspansoRoot` / `--espanso-root` option overrides detection.
-- Reports expected commands that are missing on every run. `-Check` / `--check`
-  additionally reports setup freshness and the state of `CUSTOM_CA_CERT`,
-  `CONDA_PATH`, and the selected prompt. Missing optional tools never fail the
-  run, and profile startup does not enumerate commands.
+  point (`pwsh/main.ps1` or `linux/main.sh`). On Windows the block is written to
+  the current user's all-hosts profile (`profile.ps1`). A stale block is updated
+  in place; an unmarked manual `source` line is reported and left untouched.
+- Persists the environment values listed under
+  [Persistent environment](#persistent-environment).
+- Installs or registers shared tool configuration:
+  - Espanso: `config/espanso/_base.yml` and `config/espanso/whitelist.yml` are
+    installed into the `match/` and `config/` directories of the root Espanso
+    reports for itself. See [Espanso layout](#espanso-layout).
+  - Clink (Windows, when `clink` is available): registers `config/clink` as a
+    Lua script path with `clink installscripts`; selects the Clink prompt from
+    `Settings.psd1` (`oh-my-posh` with `ohmyposh.theme` set to
+    `config/omp/catppuccin_gruvbox.json`, or `starship` with `STARSHIP_CONFIG`
+    set to `config/starship/catppuccin-powerline.toml`; `none` selects no
+    custom prompt); and points `clink.autostart` at
+    `config/clink/clink_start.cmd`. Clink only runs inside `cmd.exe`, so it uses
+    the standalone (glyph) themes. All changes go through the Clink CLI, and the
+    registered path and managed settings are recorded so `-Uninstall` can
+    reverse them. When `clink` is not on `PATH`, these steps are skipped with an
+    advisory.
+- Resolves the Espanso root by asking the tool (Windows tries `espansod path
+  config` then `espanso path config`; Linux tries `espanso` then `espansod`),
+  then falls back to the platform default (`%APPDATA%\espanso` on Windows,
+  `${XDG_CONFIG_HOME:-~/.config}/espanso` on Linux). The `-EspansoRoot` /
+  `--espanso-root` option overrides detection.
+- Reports unavailable expected commands on every run; `-Check` / `--check` also
+  reports setup freshness. Missing optional tools never fail the run, and
+  profile startup does not enumerate commands.
 
 All other startup behavior remains runtime-managed: PATH, aliases, prompt
 initialization, the SSH agent, the Git credential helper, and the generated
@@ -54,28 +59,58 @@ initialization, the SSH agent, the Git credential helper, and the generated
   installer never writes `environment.d` directly; runtime startup publishes the
   managed values.
 
+## Persistent environment
+
+Setup keeps these values set (Windows values live in the User environment scope
+unless noted):
+
+- `UV_SYSTEM_CERTS=true` — use the platform certificate store for uv, which
+  otherwise bundles Mozilla roots. On Linux, startup exports it from the managed
+  profile block and publishes it to
+  `~/.config/environment.d/90-customshell.conf` for the systemd user session.
+- `WSLENV=USERPROFILE/up` — share the Windows user-profile path with WSL,
+  translating the path and applying only from Windows to WSL.
+- `CONDA_PATH=<directory containing conda.exe>` — set when conda is found on
+  `PATH`, so profile startup can lazily initialize conda. It is not set when
+  conda is absent, and an existing valid value is respected and left unmanaged.
+- `STARSHIP_CONFIG=<repo>\config\starship\catppuccin-powerline.toml` — set when
+  `Settings.psd1` selects the `starship` prompt, so Starship (including Clink's
+  starship prompt) reads the repository theme. It is cleared when the prompt
+  changes away from starship.
+
+On Windows these values are tracked in
+`%LOCALAPPDATA%\CustomShell\environment.txt`; `-Uninstall` clears values it still
+owns, and locally modified values are reported and kept. `CONDA_PATH` is
+recorded only when setup set it, and `STARSHIP_CONFIG` only while the starship
+prompt is selected. `-EnvironmentScope Process` applies changes to the current
+process only and exists so tests never touch the registry.
+
+Processes already running before setup keep their old environment block, so a
+new session may not see new values until the environment refreshes (sign out and
+back in, or restart the terminal host). Linux shells pick them up the next time
+they start.
+
 ## Linux and WSL options
 
 ```text
---check             Report current state without changing anything.
---dry-run           Print intended actions without changing anything.
---uninstall         Remove the managed profile block and links.
---force             Replace conflicting Espanso files (with a backup).
+--check              Report current state without changing anything.
+--dry-run            Print intended actions without changing anything.
+--uninstall          Remove the managed profile block and links.
+--force              Replace conflicting Espanso files (with a backup).
 --bashrc <path>      Override the rc file to edit.
 --espanso-root <dir> Override the Espanso configuration root.
 -h, --help           Show help and exit.
 ```
 
 Linux links `config/espanso/_base.yml` into `<root>/match` and
-`config/espanso/whitelist.yml` into `<root>/config`. The root defaults to what
-`espanso path config` reports, falling back to
-`${XDG_CONFIG_HOME:-~/.config}/espanso`. A conflicting regular file is skipped
-unless `--force` is given, in which case it is moved to `<file>.customshell.bak`
-before linking. `--uninstall` removes only links that still point into the
-repository.
+`config/espanso/whitelist.yml` into `<root>/config`. A conflicting regular file
+is skipped unless `--force` is given, in which case it is moved to
+`<file>.customshell.bak` before linking. `--uninstall` removes only links that
+still point into the repository.
 
 `--check` exits non-zero when the profile block or Espanso links are missing or
-stale. Advisories about optional commands do not affect the exit status.
+stale, and reports the `CUSTOM_CA_CERT` prerequisite (only needed on managed
+devices). Advisories about optional commands do not affect the exit status.
 
 ## Windows options
 
@@ -85,54 +120,29 @@ stale. Advisories about optional commands do not affect the exit status.
 -DryRun               Print intended actions without changing anything.
 -Uninstall            Remove the managed profile block and configuration.
 -Force                Replace conflicting configuration files (with a backup).
--ProfilePath <path>   Override the profile file to edit.
+-ProfilePath <path>   Override the profile file to edit (defaults to the
+                      current user's all-hosts profile).
 -EspansoRoot <dir>    Override the Espanso configuration root.
--ClinkScriptDir <dir> Override the Clink scripts directory.
--StateDir <dir>       Override the install-manifest directory.
+-ClinkCommand <cmd>   Override the Clink command (defaults to clink on PATH).
+-SettingsPath <path>  Override the settings data file (defaults to
+                      pwsh/Settings.psd1).
+-StateDir <dir>       Override the install-manifest and state directory.
 -EnvironmentScope     User (default) or Process. Process is for testing only.
 ```
 
 Windows copies `config/espanso/_base.yml` into `<root>\match` and
-`config/espanso/whitelist.yml` into `<root>\config`, and
-`config/clink/*.lua` into `%LOCALAPPDATA%\clink`. Installed destinations are
-recorded in `%LOCALAPPDATA%\CustomShell\installed.txt`. A conflicting file is
-skipped unless `-Force` is given, in which case it is backed up to
-`<file>.customshell.bak`. `-Uninstall` removes only tracked files that still
-match the shipped source; locally modified files are reported and kept.
+`config/espanso/whitelist.yml` into `<root>\config`, recording destinations in
+`%LOCALAPPDATA%\CustomShell\installed.txt`. A conflicting file is skipped unless
+`-Force` is given, in which case it is backed up to `<file>.customshell.bak`.
+`-Uninstall` removes only tracked files that still match the shipped source, and
+reports and keeps locally modified files. Clink state is tracked separately in
+`%LOCALAPPDATA%\CustomShell\clink.json`.
 
 `-Check` exits non-zero when the profile block or expected configuration files
-are missing or stale, or when a User-scope environment value differs. Missing
-optional commands do not affect the exit status.
-
-## Persistent environment
-
-The setup script keeps these values set:
-
-- `UV_SYSTEM_CERTS=true` — use the platform certificate store for uv.
-- `BAT_CONFIG_PATH=<repo>\config\bat.conf` — point `bat` at CustomShell's shared
-  configuration (header and grid, no line numbers).
-
-uv bundles Mozilla root certificates by default, so `UV_SYSTEM_CERTS` is required
-to trust the operating system's certificate store. On Windows both values are
-stored in the User environment scope and tracked in
-`%LOCALAPPDATA%\CustomShell\environment.txt`; `-Uninstall` clears values it still
-owns, and locally modified values are reported and kept. On Linux `UV_SYSTEM_CERTS`
-is exported from the managed profile block and runtime startup publishes it
-through `~/.config/environment.d/90-customshell.conf` for the systemd user
-session; `BAT_CONFIG_PATH` is exported by `linux/integrations/tools.sh` at
-startup.
-
-On Windows these values are applied only by setup; profile startup does not set
-them. Processes that were already running before setup keep their old
-environment block, so a newly opened session may not see the new values until
-the environment refreshes (for example, after signing out and back in, or
-restarting the terminal host). Linux shells pick up the managed exports the next
-time they start.
-
-Managed environment values always win: a conflicting Windows value is
-overwritten so the persistent value is guaranteed. `-EnvironmentScope Process`
-applies the change only to the current process and exists so tests never touch
-the registry.
+are missing or stale, when another profile also sources CustomShell, when a
+User-scope environment value differs, or when Clink is installed but its script
+path or managed settings are stale. Missing optional commands, and Clink itself,
+do not affect the exit status when absent.
 
 ## Layout
 
@@ -151,6 +161,7 @@ pwsh/Install.ps1              pwsh/Install/Common.ps1
                               pwsh/Install/Environment.ps1
                               pwsh/Install/Espanso.ps1
                               pwsh/Install/Configs.ps1
+                              pwsh/Install/Clink.ps1
                               pwsh/Install/Checks.ps1
 ```
 
@@ -177,5 +188,9 @@ across Espanso versions.
 
 ## Known limitations
 
-- Clink: only `*.lua` scripts are installed. `config/clink/clink_start.cmd` is a
-  Cmder-specific autorun file and is not installed automatically.
+- Clink configuration is skipped when `clink` is not on `PATH`; installer runs
+  report an advisory and `-Check` treats it as optional.
+- Clink always uses the standalone (glyph) themes, so a glyph-limited console
+  may render them imperfectly.
+- `clink.autostart` is executed as a command line, so a repository path
+  containing spaces may need manual quoting.
