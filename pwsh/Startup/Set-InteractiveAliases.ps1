@@ -136,29 +136,56 @@ if (Get-Command vim -ErrorAction SilentlyContinue) {
     Set-Alias -Name vi -Value vim -Scope Global -Force
 }
 
-# Codex
-if (
-    -not (Get-Command codex -ErrorAction SilentlyContinue) -and
-    (Get-Command wsl -ErrorAction SilentlyContinue)
-) {
-    function global:Invoke-CodexInWsl {
-        <#
-        .SYNOPSIS
-        Runs Codex inside the default WSL login shell.
-
-        .DESCRIPTION
-        Starts Bash as a WSL login shell so its normal environment can locate
-        Codex, then forwards the remaining arguments. The wrapper is installed
-        only when native Codex is absent and WSL is available.
-        #>
-        [CmdletBinding()]
-        param(
-            [Parameter(ValueFromRemainingArguments)]
-            [string[]] $ArgumentList
-        )
-
-        wsl bash -lic 'codex "$@"' -- @ArgumentList
+# WSL commands
+# Exposes the commands listed in Settings.psd1 (WslCommands) that are only
+# available inside the default WSL distribution. Each command gets a global
+# wrapper that runs it in an interactive login Bash through WSL, so it resolves
+# from the user's own environment, while CustomShell's interactive startup
+# output stays suppressed. A command is skipped when a native command or a
+# foreign alias already provides it.
+if (Get-Command wsl -ErrorAction SilentlyContinue) {
+    $wslCommands = @()
+    if ($customShellSettings -and $customShellSettings.WslCommands) {
+        $wslCommands = @($customShellSettings.WslCommands)
     }
 
-    Set-Alias -Name codex -Value Invoke-CodexInWsl -Scope Global -Force
+    foreach ($wslCommand in $wslCommands) {
+        if (-not $wslCommand) {
+            continue
+        }
+
+        $pascalName = ($wslCommand -split '[-_.]' | Where-Object { $_ } | ForEach-Object {
+                $_.Substring(0, 1).ToUpperInvariant() + $_.Substring(1)
+            }) -join ''
+        $functionName = "Invoke-Wsl$pascalName"
+
+        $existing = Get-Command $wslCommand -ErrorAction SilentlyContinue
+        if ($existing -and -not ($existing.CommandType -eq 'Alias' -and $existing.Definition -eq $functionName)) {
+            continue
+        }
+
+        $bashScript = '{0} "$@"' -f $wslCommand
+        $wrapper = {
+            <#
+            .SYNOPSIS
+            Runs a configured command inside the default WSL login shell.
+
+            .DESCRIPTION
+            Starts Bash as an interactive login shell through WSL so the
+            command resolves from the user's environment, forwards the
+            remaining arguments, and suppresses CustomShell's interactive
+            startup output.
+            #>
+            [CmdletBinding()]
+            param(
+                [Parameter(ValueFromRemainingArguments)]
+                [string[]] $ArgumentList
+            )
+
+            wsl -e env 'CUSTOMSHELL_SUPPRESS_STARTUP_OUTPUT=true' bash -lic $bashScript _ @ArgumentList
+        }.GetNewClosure()
+
+        Set-Item -Path "Function:\global:$functionName" -Value $wrapper -Force
+        Set-Alias -Name $wslCommand -Value $functionName -Scope Global -Force
+    }
 }
