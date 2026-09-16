@@ -19,6 +19,25 @@ fail() {
 	exit 1
 }
 
+# The command inventory comes from settings, with native-only entries omitted
+# under WSL.
+bash -u -c '
+	source "$1"
+	source "$2"
+	CUSTOMSHELL_REQUIRED_COMMANDS=(sh customshell-common-missing)
+	CUSTOMSHELL_NON_WSL_REQUIRED_COMMANDS=(customshell-native-missing)
+
+	uname() { printf "%s\n" "Linux microsoft"; }
+	check_commands
+	[[ "${missing_commands[*]}" == "customshell-common-missing" ]]
+
+	uname() { printf "%s\n" "Linux native"; }
+	check_commands
+	[[ "${missing_commands[*]}" == \
+		"customshell-common-missing customshell-native-missing" ]]
+' bash "$repo_dir/linux/Settings.sh" "$repo_dir/linux/install/checks.sh" ||
+	fail "configured command inventory was not applied"
+
 md5_of() {
 	md5sum "$1" | cut -d' ' -f1
 }
@@ -42,8 +61,10 @@ first_output="$(run_install 2>&1)" || fail "install failed"
 [[ "$first_output" == *"Commands:"* ]] || fail "install did not report command state"
 grep -Fq "$marker_begin" "$test_root/home/.bashrc" || fail "profile block not inserted"
 grep -Fq "alias foo=bar" "$test_root/home/.bashrc" || fail "unrelated profile content lost"
+grep -Fq "export GTK_OVERLAY_SCROLLING=0" "$test_root/home/.bashrc" ||
+	fail "GTK environment value was not added to the profile block"
 grep -Fq "export UV_SYSTEM_CERTS=true" "$test_root/home/.bashrc" ||
-	fail "persistent environment value was not added to the profile block"
+	fail "uv environment value was not added to the profile block"
 [[ "$(grep -c -F "$marker_begin" "$test_root/home/.bashrc")" == 1 ]] ||
 	fail "expected exactly one managed block"
 

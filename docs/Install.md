@@ -64,6 +64,9 @@ initialization, the SSH agent, the Git credential helper, and the generated
 Setup keeps these values set (Windows values live in the User environment scope
 unless noted):
 
+- `GTK_OVERLAY_SCROLLING=0` (Linux only) — use traditional GTK scrollbars. The
+  managed profile block exports it and runtime startup publishes it to
+  `~/.config/environment.d/90-customshell.conf` for graphical applications.
 - `UV_SYSTEM_CERTS=true` — use the platform certificate store for uv, which
   otherwise bundles Mozilla roots. On Linux, startup exports it from the managed
   profile block and publishes it to

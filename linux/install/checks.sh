@@ -10,11 +10,9 @@ missing_commands=()
 # check_commands
 # Records expected commands that are unavailable locally.
 check_commands() {
-	local programs=("age" "bat" "btop" "conda" "delta" "dos2unix" "fd" "fzf"
-		"jq" "node" "pipx" "progress" "realpath" "rg" "shfmt" "tmux" "tree"
-		"unzip" "zip" "zoxide")
+	local programs=("${CUSTOMSHELL_REQUIRED_COMMANDS[@]}")
 	if ! uname -r | grep -qi microsoft; then
-		programs+=("lazygit" "lazydocker" "nvitop")
+		programs+=("${CUSTOMSHELL_NON_WSL_REQUIRED_COMMANDS[@]}")
 	fi
 
 	local program

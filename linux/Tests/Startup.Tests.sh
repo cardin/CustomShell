@@ -40,7 +40,6 @@ HOME="$test_root/home" USER=cardi-test PATH="$test_root/bin:$PATH" \
         declare -F Show-Help >/dev/null
         declare -F checkInstalled >/dev/null && exit 1
         [[ "$IS_WORK_DEVICE" == false ]]
-        [[ "$GTK_OVERLAY_SCROLLING" == 0 ]]
         [[ -f "$HOME/.config/environment.d/90-customshell.conf" ]]
         [[ "$(stat -c %i "$HOME/.config/environment.d/90-customshell.conf")" == "$env_inode" ]]
         [[ -f "$HOME/.cache/customshell/ssh-agent.env" ]]

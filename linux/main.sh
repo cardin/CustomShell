@@ -22,12 +22,11 @@ if [[ "$IS_WSL" == true ]]; then
 fi
 
 source "$CUSTOMSHELL_LINUX_DIR/startup/certificates.sh"
-source "$CUSTOMSHELL_LINUX_DIR/startup/desktop.sh"
 source "$CUSTOMSHELL_LINUX_DIR/integrations/tools.sh"
 
 if [[ $- == *i* ]]; then
 	source "$CUSTOMSHELL_LINUX_DIR/integrations/prompt.sh"
-	source "$CUSTOMSHELL_LINUX_DIR/ui/readline.sh"
+	bind -f "$PROJ_DIR/config/inputrc"
 fi
 
 source "$CUSTOMSHELL_LINUX_DIR/startup/ssh-agent.sh"

@@ -1,0 +1,14 @@
+# Match completion candidates without requiring the same letter case.
+set completion-ignore-case on
+
+# Color completion candidates according to their file type.
+set colored-stats on
+
+# Color the matching prefix when listing completion candidates.
+set colored-completion-prefix on
+
+# Show the common prefix above menu completion candidates.
+set menu-complete-display-prefix on
+
+# Append a slash to completed symlinks that point to directories.
+set mark-symlinked-directories on

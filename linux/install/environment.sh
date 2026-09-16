@@ -9,11 +9,13 @@
 # customshell_persistent_env_lines
 # Prints the export statements added to the managed shell block.
 customshell_persistent_env_lines() {
-    printf 'export %s=%s\n' 'UV_SYSTEM_CERTS' 'true'
+	printf 'export %s=%s\n' 'GTK_OVERLAY_SCROLLING' '0'
+	printf 'export %s=%s\n' 'UV_SYSTEM_CERTS' 'true'
 }
 
 # customshell_environment_report
 # Prints persistent environment state for the check report.
 customshell_environment_report() {
-    say "  uv certs:   UV_SYSTEM_CERTS=${UV_SYSTEM_CERTS:-unset} (managed by the profile block)"
+	say "  GTK scroll: GTK_OVERLAY_SCROLLING=${GTK_OVERLAY_SCROLLING:-unset} (managed by the profile block)"
+	say "  uv certs:   UV_SYSTEM_CERTS=${UV_SYSTEM_CERTS:-unset} (managed by the profile block)"
 }

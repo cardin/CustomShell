@@ -28,6 +28,7 @@ force=false
 bashrc="${HOME:?HOME is not set}/.bashrc"
 espanso_root=""
 
+source "$project_dir/linux/Settings.sh"
 source "$install_dir/common.sh"
 source "$install_dir/profile.sh"
 source "$install_dir/environment.sh"
