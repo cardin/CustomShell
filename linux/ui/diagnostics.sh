@@ -33,7 +33,5 @@ Show-Help() {
     [--full-path] [-e <py>] [<targetDir>] [--exec <cmd> {} /;]
 • xargs -I % [-0] echo \"%\"
 • ssh [-p <port>] [-NT] [-L [<local>:]<port>:<remote>:<port>] [-J <user>@<hop1>] <user>@<hop2>
-• \$USER${Color_Off}"
+	• \$USER${Color_Off}"
 }
-
-export TMOUT=-1

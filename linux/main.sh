@@ -21,6 +21,8 @@ if [[ "$IS_WSL" == true ]]; then
 	source "$CUSTOMSHELL_LINUX_DIR/platform/wsl.sh"
 fi
 
+# Certificate exports precede tool and prompt initialization, and must run
+# before environment-d.sh below, which republishes them to the user session.
 source "$CUSTOMSHELL_LINUX_DIR/startup/certificates.sh"
 source "$CUSTOMSHELL_LINUX_DIR/integrations/tools.sh"
 
@@ -31,6 +33,7 @@ fi
 
 source "$CUSTOMSHELL_LINUX_DIR/startup/ssh-agent.sh"
 source "$CUSTOMSHELL_LINUX_DIR/startup/environment-d.sh"
+source "$CUSTOMSHELL_LINUX_DIR/startup/terminal.sh"
 
 source "$CUSTOMSHELL_LINUX_DIR/ui/diagnostics.sh"
 if [[ $- == *i* && -z ${TMUX:-} && ${TERM:-dumb} != dumb &&
