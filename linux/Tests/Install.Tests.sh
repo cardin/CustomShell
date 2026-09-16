@@ -38,6 +38,20 @@ bash -u -c '
 ' bash "$repo_dir/linux/Settings.sh" "$repo_dir/linux/install/checks.sh" ||
 	fail "configured command inventory was not applied"
 
+# A failed Git update removes newly-created ownership state.
+git_failure_home="$test_root/git-failure"
+mkdir -p "$git_failure_home"
+bash -u -c '
+	export HOME=$1
+	dry_run=false
+	say() { :; }
+	git() { return 1; }
+	source "$2"
+	customshell_git_install && exit 1
+	[[ ! -e "$customshell_git_state_file" && ! -d "$customshell_git_state_dir" ]]
+' bash "$git_failure_home" "$repo_dir/linux/install/git.sh" ||
+	fail "failed Git configuration left ownership state behind"
+
 md5_of() {
 	md5sum "$1" | cut -d' ' -f1
 }
@@ -47,13 +61,18 @@ espanso_match="$espanso_root/match"
 espanso_config="$espanso_root/config"
 
 run_install() {
-	HOME="$test_root/home" bash "$install_script" \
+	HOME="$test_root/home" GIT_CONFIG_GLOBAL="$test_root/home/.gitconfig" \
+		bash "$install_script" \
 		--bashrc "$test_root/home/.bashrc" \
 		--espanso-root "$espanso_root" "$@"
 }
 
 mkdir -p "$test_root/home"
 printf '# my bashrc\nalias foo=bar\n' >"$test_root/home/.bashrc"
+GIT_CONFIG_GLOBAL="$test_root/home/.gitconfig" \
+	git config --global --add credential.helper store || fail "failed to stage Git helper"
+GIT_CONFIG_GLOBAL="$test_root/home/.gitconfig" \
+	git config --global --add credential.helper manager-core || fail "failed to stage second Git helper"
 original_md5="$(md5_of "$test_root/home/.bashrc")"
 
 # First install inserts the block once and preserves unrelated content.
@@ -65,6 +84,9 @@ grep -Fq "export GTK_OVERLAY_SCROLLING=0" "$test_root/home/.bashrc" ||
 	fail "GTK environment value was not added to the profile block"
 grep -Fq "export UV_SYSTEM_CERTS=true" "$test_root/home/.bashrc" ||
 	fail "uv environment value was not added to the profile block"
+[[ "$(GIT_CONFIG_GLOBAL="$test_root/home/.gitconfig" git config --global --get-all credential.helper)" == "cache --timeout=21600" ]] || fail "Git credential helper was not configured"
+[[ -f "$test_root/home/.local/state/customshell/git-credential-helper" ]] ||
+	fail "previous Git credential helper was not recorded"
 [[ "$(grep -c -F "$marker_begin" "$test_root/home/.bashrc")" == 1 ]] ||
 	fail "expected exactly one managed block"
 
@@ -124,6 +146,9 @@ run_install --uninstall >/dev/null 2>&1 || fail "uninstall failed"
 	fail "uninstall did not restore the original profile"
 [[ ! -e "$espanso_match/_base.yml" && ! -e "$espanso_config/whitelist.yml" ]] ||
 	fail "uninstall left managed links behind"
+[[ "$(GIT_CONFIG_GLOBAL="$test_root/home/.gitconfig" git config --global --get-all credential.helper)" == $'store\nmanager-core' ]] || fail "uninstall did not restore the previous Git credential helpers"
+[[ ! -e "$test_root/home/.local/state/customshell/git-credential-helper" ]] ||
+	fail "uninstall left Git credential helper state behind"
 run_install --check >/dev/null 2>&1 && fail "check passed for an unconfigured setup"
 
 # An unmarked manual source line is left untouched.

@@ -30,7 +30,6 @@ if [[ $- == *i* ]]; then
 fi
 
 source "$CUSTOMSHELL_LINUX_DIR/startup/ssh-agent.sh"
-source "$CUSTOMSHELL_LINUX_DIR/startup/git.sh"
 source "$CUSTOMSHELL_LINUX_DIR/startup/environment-d.sh"
 
 source "$CUSTOMSHELL_LINUX_DIR/ui/diagnostics.sh"

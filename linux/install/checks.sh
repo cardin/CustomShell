@@ -85,6 +85,9 @@ report_checks() {
 		say "  CA cert:    CUSTOM_CA_CERT not set (only needed on managed devices)"
 	fi
 	say "  prompt:     ${PRETTY_PROMPT:-ohmyposh}"
+	if ! customshell_git_check; then
+		check_failures=$((check_failures + 1))
+	fi
 
 	check_commands
 	if [[ ${#missing_commands[@]} -eq 0 ]]; then

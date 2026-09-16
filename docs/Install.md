@@ -37,6 +37,8 @@ bash <repo>/linux/install.sh
     registered path and managed settings are recorded so `-Uninstall` can
     reverse them. When `clink` is not on `PATH`, these steps are skipped with an
     advisory.
+  - Git (Linux, when `git` is available): configures the global credential cache
+    with a six-hour timeout and records the previous helper values for uninstall.
 - Resolves the Espanso root by asking the tool (Windows tries `espansod path
   config` then `espanso path config`; Linux tries `espanso` then `espansod`),
   then falls back to the platform default (`%APPDATA%\espanso` on Windows,
@@ -47,17 +49,17 @@ bash <repo>/linux/install.sh
   profile startup does not enumerate commands.
 
 All other startup behavior remains runtime-managed: PATH, aliases, prompt
-initialization, the SSH agent, the Git credential helper, and the generated
-`environment.d` file are handled by startup code and are never modified here.
+initialization, the SSH agent, and the generated `environment.d` file are
+handled by startup code and are never modified here.
 
 ## What it does not do
 
 - No package installation and no privilege escalation.
 - No creation of symbolic links or junctions on Windows; configuration files
   are copied so no elevation is required.
-- No changes to secrets, SSH data, CA certificates, or Git credentials. The
-  installer never writes `environment.d` directly; runtime startup publishes the
-  managed values.
+- No changes to secrets, SSH data, or CA certificates. Git credential-helper
+  configuration is the only Git state changed. The installer never writes
+  `environment.d` directly; runtime startup publishes the managed values.
 
 ## Persistent environment
 
@@ -98,7 +100,7 @@ they start.
 ```text
 --check              Report current state without changing anything.
 --dry-run            Print intended actions without changing anything.
---uninstall          Remove the managed profile block and links.
+--uninstall          Remove the managed profile, links, and Git helper.
 --force              Replace conflicting Espanso files (with a backup).
 --bashrc <path>      Override the rc file to edit.
 --espanso-root <dir> Override the Espanso configuration root.
@@ -111,9 +113,15 @@ is skipped unless `--force` is given, in which case it is moved to
 `<file>.customshell.bak` before linking. `--uninstall` removes only links that
 still point into the repository.
 
-`--check` exits non-zero when the profile block or Espanso links are missing or
-stale, and reports the `CUSTOM_CA_CERT` prerequisite (only needed on managed
-devices). Advisories about optional commands do not affect the exit status.
+Linux records previous global Git credential-helper values under
+`${XDG_STATE_HOME:-~/.local/state}/customshell/`. `--uninstall` restores them
+only while the configured cache helper is still unchanged; a locally modified
+helper is reported and kept.
+
+`--check` exits non-zero when the profile block, Espanso links, or Git helper are
+missing or stale, and reports the `CUSTOM_CA_CERT` prerequisite (only needed on
+managed devices). Advisories about optional commands do not affect the exit
+status.
 
 ## Windows options
 
@@ -157,6 +165,7 @@ linux/install.sh              linux/install/common.sh
                               linux/install/profile.sh
                               linux/install/environment.sh
                               linux/install/espanso.sh
+                              linux/install/git.sh
                               linux/install/checks.sh
 
 pwsh/Install.ps1              pwsh/Install/Common.ps1

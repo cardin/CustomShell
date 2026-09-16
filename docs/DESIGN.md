@@ -32,9 +32,9 @@ or change external configuration. Shared tool configuration lives under
 - Shared tool configuration is read from the repository at runtime where
   possible. When a tool cannot do that, setup installs or registers the
   configuration as described in [Install.md](Install.md).
-- Linux may configure Git credentials, manage a reusable `ssh-agent`, and
-  regenerate CustomShell's `environment.d` file. PowerShell startup does not
-  change global Git configuration.
+- Linux startup may manage a reusable `ssh-agent` and regenerate CustomShell's
+  `environment.d` file. Linux setup owns its Git credential-helper setting;
+  PowerShell startup does not change global Git configuration.
 
 ## Setup and upgrades
 
@@ -47,7 +47,7 @@ or change external configuration. Shared tool configuration lives under
   environment values, and installs or registers the configuration described in
   [Install.md](Install.md). It delegates runtime mutation to existing startup
   code and never installs packages, escalates privileges, or modifies secrets,
-  SSH, CA, or Git state.
+  SSH, or CA state.
 - Persistent environment values are installer-owned on both platforms and always
   win over conflicts. Windows writes the User scope; Linux exports them from the
   managed profile block and runtime startup publishes them for the systemd user
@@ -58,6 +58,9 @@ or change external configuration. Shared tool configuration lives under
   settings on uninstall.
 - Setup reports unavailable expected commands on every run, so startup performs
   no command discovery; `Show-Help` remains the startup reminder.
+- Linux setup records the previous Git credential-helper values before applying
+  its cache helper. Uninstall restores them when the managed value has not been
+  modified locally.
 
 ## Compatibility and safety
 

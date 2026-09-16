@@ -5,11 +5,11 @@
 # the Bash entry point into the user's rc file, publishes persistent environment
 # values, links shipped tool configuration into place, and reports missing
 # prerequisites. It never installs packages and never touches secrets, SSH data,
-# CA certificates, Git credentials, or environment.d state directly.
+# CA certificates, or environment.d state directly.
 #
 # The work is split across modules under linux/install/: common helpers, the
-# managed profile block, persistent environment values, Espanso configuration,
-# and read-only checks.
+# managed profile block, persistent environment values, Espanso and Git
+# configuration, and read-only checks.
 
 set -u
 
@@ -33,6 +33,7 @@ source "$install_dir/common.sh"
 source "$install_dir/profile.sh"
 source "$install_dir/environment.sh"
 source "$install_dir/espanso.sh"
+source "$install_dir/git.sh"
 source "$install_dir/checks.sh"
 
 usage() {
@@ -46,7 +47,7 @@ repeatedly.
 Options:
   --check              Report current state without changing anything.
   --dry-run            Print intended actions without changing anything.
-  --uninstall          Remove the CustomShell profile block and managed links.
+  --uninstall          Remove the managed profile, links, and Git helper.
   --force              Replace conflicting configuration files (with backups).
   --bashrc <path>      Override the rc file to edit (default: ~/.bashrc).
   --espanso-root <dir> Override the Espanso configuration root.
@@ -111,6 +112,7 @@ case "$mode" in
 install)
 	write_profile_block || exit 1
 	link_espanso || exit 1
+	customshell_git_install || exit 1
 	report_commands
 	if [[ "$dry_run" == true ]]; then
 		say "Dry run complete; no changes made."
@@ -119,12 +121,13 @@ install)
 	fi
 	;;
 uninstall)
+	customshell_git_uninstall || exit 1
 	remove_profile_block || exit 1
 	unlink_espanso || exit 1
 	if [[ "$dry_run" == true ]]; then
 		say "Dry run complete; no changes made."
 	else
-		say "CustomShell profile block and managed links removed."
+		say "CustomShell managed configuration removed."
 	fi
 	;;
 check)
