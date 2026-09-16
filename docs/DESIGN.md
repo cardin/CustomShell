@@ -19,6 +19,10 @@ or change external configuration. Shared tool configuration lives under
   interactive contexts and remains suppressed in embedded or nested sessions.
 - Prompt engines initialize before zoxide so its directory-tracking hook wraps
   the final prompt function and remains active.
+- Bash initializes Oh My Posh with `--strict`, keeping the executable a `PATH`
+  lookup instead of a resolved versioned path. This stops an in-place
+  linuxbrew/Homebrew upgrade from deleting the binary a running prompt still
+  points at.
 - Platform-specific features activate only where supported; Windows
   interoperability helpers are limited to WSL.
 - WSL-exposed commands are declared in `pwsh/Settings.psd1` (`WslCommands`) and

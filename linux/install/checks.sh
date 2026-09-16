@@ -11,7 +11,7 @@ missing_commands=()
 # Records expected commands that are unavailable locally.
 check_commands() {
 	local programs=("age" "bat" "btop" "conda" "delta" "dos2unix" "fd" "fzf"
-		"node" "pipx" "progress" "realpath" "rg" "shfmt" "tmux" "tree"
+		"jq" "node" "pipx" "progress" "realpath" "rg" "shfmt" "tmux" "tree"
 		"unzip" "zip" "zoxide")
 	if ! uname -r | grep -qi microsoft; then
 		programs+=("lazygit" "lazydocker" "nvitop")

@@ -16,6 +16,7 @@
         'delta'
         'fd'
         'fzf'
+        'jq'
         'less'
         'node'
         'nvitop'
