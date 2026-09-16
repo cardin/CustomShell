@@ -2,6 +2,8 @@
 
 """Validate paths and portable tar structures for CustomShell archives."""
 
+from __future__ import annotations
+
 import fnmatch
 import os
 import pathlib
@@ -11,6 +13,8 @@ import sys
 import tarfile
 
 
+WINDOWS_DRIVE_PREFIX = re.compile(r"^[A-Za-z]:")
+WINDOWS_FORBIDDEN_CHARACTERS = frozenset('<>:"\\|?*')
 WINDOWS_RESERVED_NAMES = {
     "CON",
     "PRN",
@@ -24,14 +28,19 @@ WINDOWS_RESERVED_NAMES = {
 def validate_windows_name(name: str) -> None:
     if (
         not name
-        or any(ord(character) < 32 or character in '<>:"\\|?*' for character in name)
+        or any(
+            ord(character) < 32 or character in WINDOWS_FORBIDDEN_CHARACTERS
+            for character in name
+        )
         or name.endswith((" ", "."))
         or name.split(".", 1)[0].upper() in WINDOWS_RESERVED_NAMES
     ):
         raise ValueError(f"archive name is not portable to Windows: {name!r}")
 
 
-def is_tarignored(rel_path: str, is_dir: bool, ignore_rules: list[tuple[str, str]]) -> bool:
+def is_tarignored(
+    rel_path: str, ignore_rules: list[tuple[str, str]]
+) -> bool:
     for base_dir, pattern in ignore_rules:
         if base_dir:
             if not (rel_path == base_dir or rel_path.startswith(base_dir + "/")):
@@ -40,19 +49,32 @@ def is_tarignored(rel_path: str, is_dir: bool, ignore_rules: list[tuple[str, str
         else:
             in_scope = rel_path
 
-        clean_pattern = pattern.rstrip("/")
-        if "/" not in clean_pattern:
+        if not pattern:
+            continue
+        if "/" not in pattern:
             name = pathlib.PurePosixPath(rel_path).name
-            if fnmatch.fnmatch(name, clean_pattern):
+            if fnmatch.fnmatch(name, pattern):
                 return True
         else:
-            pat = clean_pattern.lstrip("/")
+            pat = pattern.lstrip("/")
             if fnmatch.fnmatch(in_scope, pat) or fnmatch.fnmatch(in_scope, pat + "/*"):
                 return True
     return False
 
 
-def collect_source_paths(source_path: pathlib.Path, use_ignore: bool = True) -> list[pathlib.Path]:
+def read_tarignore(path: pathlib.Path, base_dir: str) -> list[tuple[str, str]]:
+    rules = []
+    with path.open("r", encoding="utf-8", errors="replace") as tarignore_file:
+        for line in tarignore_file:
+            pattern = line.strip()
+            if pattern and not pattern.startswith("#"):
+                rules.append((base_dir, pattern))
+    return rules
+
+
+def collect_source_paths(
+    source_path: pathlib.Path, use_ignore: bool = True
+) -> list[pathlib.Path]:
     if not source_path.is_dir() or source_path.is_symlink():
         return [source_path]
 
@@ -68,28 +90,21 @@ def collect_source_paths(source_path: pathlib.Path, use_ignore: bool = True) -> 
         if use_ignore:
             tarignore_file = current_dir / ".tarignore"
             if tarignore_file.is_file():
-                try:
-                    with tarignore_file.open("r", encoding="utf-8", errors="replace") as f:
-                        for line in f:
-                            line = line.strip()
-                            if line and not line.startswith("#"):
-                                ignore_rules.append((rel_dir, line))
-                except OSError:
-                    pass
+                ignore_rules.extend(read_tarignore(tarignore_file, rel_dir))
 
         # Filter directories in-place to avoid descending into ignored dirs
         surviving_dirs = []
-        for d in dirs:
-            dir_rel = f"{rel_dir}/{d}" if rel_dir else d
-            if not use_ignore or not is_tarignored(dir_rel, True, ignore_rules):
-                surviving_dirs.append(d)
-                collected.append(current_dir / d)
+        for directory in dirs:
+            dir_rel = f"{rel_dir}/{directory}" if rel_dir else directory
+            if not use_ignore or not is_tarignored(dir_rel, ignore_rules):
+                surviving_dirs.append(directory)
+                collected.append(current_dir / directory)
         dirs[:] = surviving_dirs
 
-        for f in files:
-            file_rel = f"{rel_dir}/{f}" if rel_dir else f
-            if not use_ignore or not is_tarignored(file_rel, False, ignore_rules):
-                collected.append(current_dir / f)
+        for filename in files:
+            file_rel = f"{rel_dir}/{filename}" if rel_dir else filename
+            if not use_ignore or not is_tarignored(file_rel, ignore_rules):
+                collected.append(current_dir / filename)
 
     return collected
 
@@ -116,7 +131,11 @@ def normalized_member_path(name: str) -> str:
     normalized = name.replace("\\", "/")
     while normalized.startswith("./"):
         normalized = normalized[2:]
-    if not normalized or normalized.startswith("/") or re.match(r"^[A-Za-z]:", normalized):
+    if (
+        not normalized
+        or normalized.startswith("/")
+        or WINDOWS_DRIVE_PREFIX.match(normalized)
+    ):
         raise ValueError(f"unsafe archive path: {name!r}")
     parts = pathlib.PurePosixPath(normalized).parts
     if ".." in parts:
@@ -124,10 +143,43 @@ def normalized_member_path(name: str) -> str:
     return "/".join(part for part in parts if part not in {"", "."})
 
 
+def validate_member_type(
+    member: tarfile.TarInfo, normalized: str, platform: str
+) -> None:
+    if not (member.isfile() or member.isdir() or member.issym() or member.islnk()):
+        raise ValueError(f"unsupported archive member type: {normalized!r}")
+    if platform == "windows" and (member.issym() or member.islnk()):
+        raise ValueError(f"archive links are not supported on Windows: {normalized!r}")
+
+
+def validate_link_target(
+    member: tarfile.TarInfo, normalized: str, top_level: str
+) -> None:
+    target = member.linkname.replace("\\", "/")
+    if target.startswith("/") or WINDOWS_DRIVE_PREFIX.match(target):
+        raise ValueError(f"archive link target escapes extraction: {target!r}")
+    base = posixpath.dirname(normalized) if member.issym() else ""
+    resolved = posixpath.normpath(posixpath.join(base, target))
+    if (
+        resolved == ".."
+        or resolved.startswith("../")
+        or resolved.split("/", 1)[0] != top_level
+    ):
+        raise ValueError(f"archive link target escapes extraction: {target!r}")
+
+
+def has_symlink_ancestor(path: str, symlinks: set[str]) -> bool:
+    ancestors = path.split("/")[:-1]
+    return any(
+        "/".join(ancestors[:depth]) in symlinks
+        for depth in range(1, len(ancestors) + 1)
+    )
+
+
 def validate_tar(tar_path: pathlib.Path, platform: str) -> int:
-    seen = {}
-    members = []
-    top_levels = set()
+    seen: dict[str, str] = {}
+    members: list[tuple[tarfile.TarInfo, str]] = []
+    top_levels: set[str] = set()
     with tarfile.open(tar_path, "r:gz") as archive:
         for member in archive.getmembers():
             normalized = normalized_member_path(member.name)
@@ -141,10 +193,7 @@ def validate_tar(tar_path: pathlib.Path, platform: str) -> int:
             if folded in seen:
                 raise ValueError(f"duplicate or colliding archive path: {normalized!r}")
             seen[folded] = normalized
-            if not (member.isfile() or member.isdir() or member.issym() or member.islnk()):
-                raise ValueError(f"unsupported archive member type: {normalized!r}")
-            if platform == "windows" and (member.issym() or member.islnk()):
-                raise ValueError(f"archive links are not supported on Windows: {normalized!r}")
+            validate_member_type(member, normalized, platform)
             members.append((member, normalized))
 
     if len(top_levels) != 1:
@@ -153,18 +202,12 @@ def validate_tar(tar_path: pathlib.Path, platform: str) -> int:
     symlinks = {name for member, name in members if member.issym()}
     top_level = next(iter(top_levels))
     for member, normalized in members:
-        ancestors = normalized.split("/")[:-1]
-        for depth in range(1, len(ancestors) + 1):
-            if "/".join(ancestors[:depth]) in symlinks:
-                raise ValueError(f"archive member traverses a symbolic link: {normalized!r}")
+        if has_symlink_ancestor(normalized, symlinks):
+            raise ValueError(
+                f"archive member traverses a symbolic link: {normalized!r}"
+            )
         if member.issym() or member.islnk():
-            target = member.linkname.replace("\\", "/")
-            if target.startswith("/") or re.match(r"^[A-Za-z]:", target):
-                raise ValueError(f"archive link target escapes extraction: {target!r}")
-            base = posixpath.dirname(normalized) if member.issym() else ""
-            resolved = posixpath.normpath(posixpath.join(base, target))
-            if resolved == ".." or resolved.startswith("../") or resolved.split("/", 1)[0] != top_level:
-                raise ValueError(f"archive link target escapes extraction: {target!r}")
+            validate_link_target(member, normalized, top_level)
     print(len(members))
     return 0
 

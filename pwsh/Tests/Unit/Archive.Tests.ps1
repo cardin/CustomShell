@@ -346,6 +346,24 @@ function New-TestTarGzip {
         Test-Path -LiteralPath (Join-Path $destination 'source\ignored_dir') | Should -Be $false
     }
 
+    It 'does not publish an archive when a discovered .tarignore cannot be read' {
+        $ignorePath = Join-Path $source '.tarignore'
+        Set-Content -LiteralPath $ignorePath -Value '*.tmp'
+        Mock Get-Content {
+            throw [UnauthorizedAccessException]::new('simulated .tarignore read failure')
+        } -ModuleName CustomShell.Commands -ParameterFilter {
+            $LiteralPath -eq $ignorePath
+        }
+
+        { Protect-Tar $source $archiveBase | Out-Null } |
+            Should -Throw '*simulated .tarignore read failure*'
+        Should -Invoke Get-Content -ModuleName CustomShell.Commands -Times 1 -ParameterFilter {
+            $LiteralPath -eq $ignorePath -and $ErrorAction -eq 'Stop'
+        }
+        @(Get-ChildItem -LiteralPath $testRoot -Filter 'archive_*.enc').Count |
+            Should -Be 0
+    }
+
     It 'includes .tarignore-matched files when --no-ignore is passed' {
         New-Item -ItemType Directory -Path (Join-Path $source 'nested') -Force | Out-Null
         Set-Content -LiteralPath (Join-Path $source '.tarignore') -Value "*.tmp`nignored_dir`n# comment"

@@ -21,6 +21,8 @@ Unprotect-Tar --help
 - Directory archiving recursively applies exclusion rules from `.tarignore`
   files by default (equivalent to GNU tar's `--exclude-ignore-recursive=.tarignore`).
   Empty lines and lines beginning with `#` are ignored.
+  An unreadable `.tarignore` fails validation instead of silently archiving
+  paths that the file may have excluded.
   `--no-ignore` disables this default handling so ignored files are archived.
 
 ## Input and output

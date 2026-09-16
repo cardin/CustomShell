@@ -18,6 +18,8 @@ fail() {
 
 PROJ_DIR="$(realpath -e -- "$(dirname "${BASH_SOURCE[0]}")/../..")"
 source "$(dirname "${BASH_SOURCE[0]}")/../commands/archive.sh"
+PYTHONDONTWRITEBYTECODE=1 python3 "$PROJ_DIR/linux/Tests/ArchiveAuth.Tests.py" -q ||
+	fail "archive validator unit tests failed"
 
 declare -F Protect-Tar >/dev/null || fail "Protect-Tar is not defined"
 declare -F Unprotect-Tar >/dev/null || fail "Unprotect-Tar is not defined"

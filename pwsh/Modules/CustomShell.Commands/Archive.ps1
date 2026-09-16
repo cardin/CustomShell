@@ -262,7 +262,7 @@ Install age or ensure age.exe is available in PATH.
 
         $tarignoreExcludes = @(
             if ($sourceItem.PSIsContainer -and -not $NoIgnore) {
-                $ignoreFiles = @(Get-ChildItem -LiteralPath $sourceItem.FullName -Filter '.tarignore' -Recurse -Force -File -ErrorAction SilentlyContinue)
+                $ignoreFiles = @(Get-ChildItem -LiteralPath $sourceItem.FullName -Filter '.tarignore' -Recurse -Force -File -ErrorAction Stop)
                 foreach ($ignoreFile in $ignoreFiles) {
                     $dir = $ignoreFile.Directory
                     $relDir = if ($dir.FullName -eq $sourceItem.FullName) {
@@ -271,7 +271,7 @@ Install age or ensure age.exe is available in PATH.
                     else {
                         $dir.FullName.Substring($sourceItem.FullName.Length + 1).Replace('\', '/')
                     }
-                    $lines = @(Get-Content -LiteralPath $ignoreFile.FullName -ErrorAction SilentlyContinue)
+                    $lines = @(Get-Content -LiteralPath $ignoreFile.FullName -ErrorAction Stop)
                     foreach ($line in $lines) {
                         $trimmed = $line.Trim()
                         if ([string]::IsNullOrWhiteSpace($trimmed) -or $trimmed.StartsWith('#')) {
