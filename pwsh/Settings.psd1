@@ -7,7 +7,6 @@
     Prompt               = 'ohmyposh'
     WslCommands          = @(
         'opencode'
-        'agent-deck'
     )
     RequiredCommands     = @(
         'age'

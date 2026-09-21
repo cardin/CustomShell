@@ -55,6 +55,24 @@ if (Get-Command vim -ErrorAction SilentlyContinue) {
 # from the user's own environment, while CustomShell's interactive startup
 # output stays suppressed. A command is skipped when a native command or a
 # foreign alias already provides it.
+# Remove wrappers created by a previous profile load first, so deleting a
+# command from settings or installing a native command takes effect immediately.
+foreach ($managedWslCommand in @($global:CustomShellManagedWslCommands)) {
+    if (-not $managedWslCommand -or -not $managedWslCommand.AliasName -or -not $managedWslCommand.FunctionName) {
+        continue
+    }
+    $managedAlias = Get-Alias -Name $managedWslCommand.AliasName -ErrorAction SilentlyContinue
+    if ($managedAlias -and $managedAlias.Definition -eq $managedWslCommand.FunctionName) {
+        Remove-Item -Path "Alias:\$($managedWslCommand.AliasName)" -Force
+    }
+
+    $managedFunction = Get-Item -Path "Function:\global:$($managedWslCommand.FunctionName)" -ErrorAction SilentlyContinue
+    if ($managedFunction -and $managedFunction.ScriptBlock -eq $managedWslCommand.ScriptBlock) {
+        Remove-Item -Path "Function:\global:$($managedWslCommand.FunctionName)" -Force
+    }
+}
+$managedWslCommands = [Collections.Generic.List[object]]::new()
+
 if (Get-Command wsl -ErrorAction SilentlyContinue) {
     $wslCommands = @()
     if ($customShellSettings -and $customShellSettings.WslCommands) {
@@ -99,5 +117,12 @@ if (Get-Command wsl -ErrorAction SilentlyContinue) {
 
         Set-Item -Path "Function:\global:$functionName" -Value $wrapper -Force
         Set-Alias -Name $wslCommand -Value $functionName -Scope Global -Force
+        $managedWslCommands.Add([pscustomobject]@{
+                AliasName    = $wslCommand
+                FunctionName = $functionName
+                ScriptBlock  = $wrapper
+            })
     }
 }
+
+$global:CustomShellManagedWslCommands = $managedWslCommands.ToArray()

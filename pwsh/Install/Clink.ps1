@@ -218,13 +218,14 @@ function Register-ClinkScriptPath {
     $output = & $Clink installscripts $Path 2>&1
     $text = (@($output) | ForEach-Object { $_.ToString() }) -join ' '
     if ($text -match 'already installed') {
-        return
+        return $true
     }
     if ($LASTEXITCODE -ne 0) {
         Write-Warning "Clink failed to register script path ${Path}: $text"
-        return
+        return $false
     }
     Write-Host "Registered Clink script path $Path"
+    return $true
 }
 
 # Unregister-ClinkScriptPath
@@ -240,13 +241,14 @@ function Unregister-ClinkScriptPath {
     $output = & $Clink uninstallscripts $Path 2>&1
     $text = (@($output) | ForEach-Object { $_.ToString() }) -join ' '
     if ($text -match 'not installed') {
-        return
+        return $true
     }
     if ($LASTEXITCODE -ne 0) {
         Write-Warning "Clink failed to unregister script path ${Path}: $text"
-        return
+        return $false
     }
     Write-Host "Unregistered Clink script path $Path"
+    return $true
 }
 
 # Get-ClinkStatePath
@@ -524,11 +526,15 @@ function Install-Clink {
 
     if ($state.scriptsPath -and ($state.scriptsPath.TrimEnd('\') -ine $scriptsPath.TrimEnd('\'))) {
         if (Test-ClinkScriptPathRegistered -Clink $clink -Path $state.scriptsPath) {
-            Unregister-ClinkScriptPath -Clink $clink -Path $state.scriptsPath
+            if (-not (Unregister-ClinkScriptPath -Clink $clink -Path $state.scriptsPath)) {
+                throw "Could not unregister the previous Clink script path: $($state.scriptsPath)"
+            }
         }
     }
     if (-not (Test-ClinkScriptPathRegistered -Clink $clink -Path $scriptsPath)) {
-        Register-ClinkScriptPath -Clink $clink -Path $scriptsPath
+        if (-not (Register-ClinkScriptPath -Clink $clink -Path $scriptsPath)) {
+            throw "Could not register the Clink script path: $scriptsPath"
+        }
     }
     $state.scriptsPath = $scriptsPath
 
@@ -563,8 +569,12 @@ function Uninstall-Clink {
         return
     }
 
+    $keepScriptsPath = $false
     if ($state.scriptsPath -and (Test-ClinkScriptPathRegistered -Clink $clink -Path $state.scriptsPath)) {
-        Unregister-ClinkScriptPath -Clink $clink -Path $state.scriptsPath
+        if (-not (Unregister-ClinkScriptPath -Clink $clink -Path $state.scriptsPath)) {
+            Write-Warning 'Keeping the Clink script-path state so uninstall can be retried.'
+            $keepScriptsPath = $true
+        }
     }
 
     $remaining = [System.Collections.Generic.List[object]]::new()
@@ -574,7 +584,9 @@ function Uninstall-Clink {
         }
     }
 
-    $state.scriptsPath = $null
+    if (-not $keepScriptsPath) {
+        $state.scriptsPath = $null
+    }
     $state.settings = $remaining
     Save-ClinkState -State $state
 }

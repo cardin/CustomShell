@@ -62,29 +62,55 @@ function Get-CondaPath {
 }
 
 # Get-EnvironmentStatePath
-# Returns the file that records the environment values CustomShell set.
+# Returns the JSON file that records the environment values CustomShell set.
 function Get-EnvironmentStatePath {
+    return Join-Path $StateDir 'environment.json'
+}
+
+# Get-LegacyEnvironmentStatePath
+# Returns the name-only state file used before managed values were recorded.
+function Get-LegacyEnvironmentStatePath {
     return Join-Path $StateDir 'environment.txt'
 }
 
-# Get-ManagedEnvironmentNames
-# Reads the recorded environment variable names.
-function Get-ManagedEnvironmentNames {
+# Get-ManagedEnvironmentState
+# Reads managed names and the exact values CustomShell applied. Legacy name-only
+# records are retained with an unknown desired value so they are never cleared
+# without proof that CustomShell still owns the current value.
+function Get-ManagedEnvironmentState {
     $path = Get-EnvironmentStatePath
     if (Test-Path -LiteralPath $path) {
-        return @(Get-Content -LiteralPath $path | Where-Object { $_ -ne '' })
+        try {
+            $state = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
+            return @($state.entries | Where-Object { $_.name } | ForEach-Object {
+                    [pscustomobject]@{
+                        name    = [string] $_.name
+                        desired = if ($null -eq $_.desired) { $null } else { [string] $_.desired }
+                    }
+                })
+        }
+        catch {
+            throw "Could not read environment state file ${path}: $($_.Exception.Message)"
+        }
     }
+
+    $legacyPath = Get-LegacyEnvironmentStatePath
+    if (Test-Path -LiteralPath $legacyPath) {
+        return @(Get-Content -LiteralPath $legacyPath | Where-Object { $_ -ne '' } | ForEach-Object {
+                [pscustomobject]@{ name = [string] $_; desired = $null }
+            })
+    }
+
     return @()
 }
 
-# Save-ManagedEnvironmentNames
-# Persists the recorded environment variable names.
-function Save-ManagedEnvironmentNames {
+# Save-ManagedEnvironmentState
+# Persists managed names and values, replacing the legacy name-only record.
+function Save-ManagedEnvironmentState {
     param(
         [Parameter(Mandatory)]
         [AllowEmptyCollection()]
-        [AllowEmptyString()]
-        [string[]] $Names
+        [object[]] $Entries
     )
 
     if ($DryRun) {
@@ -92,9 +118,12 @@ function Save-ManagedEnvironmentNames {
     }
 
     $path = Get-EnvironmentStatePath
-    if ($Names.Count -eq 0) {
-        if (Test-Path -LiteralPath $path) {
-            Remove-Item -LiteralPath $path -Force
+    $legacyPath = Get-LegacyEnvironmentStatePath
+    if ($Entries.Count -eq 0) {
+        foreach ($statePath in @($path, $legacyPath)) {
+            if (Test-Path -LiteralPath $statePath) {
+                Remove-Item -LiteralPath $statePath -Force
+            }
         }
         return
     }
@@ -102,7 +131,23 @@ function Save-ManagedEnvironmentNames {
     if (-not (Test-Path -LiteralPath $StateDir)) {
         New-Item -ItemType Directory -Path $StateDir -Force | Out-Null
     }
-    Set-Content -LiteralPath $path -Value @($Names | Sort-Object -Unique)
+    $state = [ordered]@{
+        version = 1
+        entries = @($Entries | Sort-Object name | ForEach-Object {
+                [ordered]@{ name = $_.name; desired = $_.desired }
+            })
+    }
+    $temporaryPath = Join-Path $StateDir ('.environment.' + [guid]::NewGuid() + '.tmp')
+    try {
+        $state | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $temporaryPath
+        Move-Item -LiteralPath $temporaryPath -Destination $path -Force
+    }
+    finally {
+        Remove-Item -LiteralPath $temporaryPath -Force -ErrorAction SilentlyContinue
+    }
+    if (Test-Path -LiteralPath $legacyPath) {
+        Remove-Item -LiteralPath $legacyPath -Force
+    }
 }
 
 # Install-PersistentEnvironment
@@ -120,22 +165,31 @@ function Install-PersistentEnvironment {
     }
 
     $desiredNames = @($desiredValues.Keys)
-    $managed = [System.Collections.Generic.List[string]]::new()
+    $existingByName = @{}
+    foreach ($entry in (Get-ManagedEnvironmentState)) {
+        $existingByName[$entry.name] = $entry
+    }
+    $managed = [System.Collections.Generic.List[object]]::new()
 
     # Clear recorded values that are no longer managed, e.g. STARSHIP_CONFIG
     # after switching away from the starship prompt.
-    foreach ($name in (Get-ManagedEnvironmentNames)) {
+    foreach ($entry in $existingByName.Values) {
+        $name = $entry.name
         if ($desiredNames -contains $name) {
-            $managed.Add($name)
             continue
         }
         if ($name -eq 'CONDA_PATH' -and (Test-CondaPathConfigured)) {
-            $managed.Add($name)
+            $managed.Add($entry)
             continue
         }
 
         $current = [Environment]::GetEnvironmentVariable($name, $EnvironmentScope)
         if ($null -eq $current) {
+            continue
+        }
+        if ($null -eq $entry.desired -or $current -ne $entry.desired) {
+            Write-Warning "Keeping modified environment variable ${name}: '$current'."
+            $managed.Add($entry)
             continue
         }
         if ($DryRun) {
@@ -161,30 +215,27 @@ function Install-PersistentEnvironment {
             }
         }
 
-        if (-not $managed.Contains($name)) {
-            $managed.Add($name)
-        }
+        $managed.Add([pscustomobject]@{ name = $name; desired = $desired })
     }
 
-    Save-ManagedEnvironmentNames -Names $managed.ToArray()
+    Save-ManagedEnvironmentState -Entries $managed.ToArray()
 }
 
 # Uninstall-PersistentEnvironment
 # Clears managed environment values that still match their desired value.
 function Uninstall-PersistentEnvironment {
-    $desiredValues = Get-PersistentEnvironment
-    $remaining = [System.Collections.Generic.List[string]]::new()
+    $remaining = [System.Collections.Generic.List[object]]::new()
 
-    foreach ($name in (Get-ManagedEnvironmentNames)) {
+    foreach ($entry in (Get-ManagedEnvironmentState)) {
+        $name = $entry.name
         $current = [Environment]::GetEnvironmentVariable($name, $EnvironmentScope)
         if ($null -eq $current) {
             continue
         }
 
-        $desired = if ($desiredValues.Contains($name)) { $desiredValues[$name] } else { $null }
-        if ($desired -and $current -ne $desired) {
+        if ($null -eq $entry.desired -or $current -ne $entry.desired) {
             Write-Warning "Keeping modified environment variable ${name}: '$current'."
-            $remaining.Add($name)
+            $remaining.Add($entry)
             continue
         }
 
@@ -197,5 +248,5 @@ function Uninstall-PersistentEnvironment {
         }
     }
 
-    Save-ManagedEnvironmentNames -Names $remaining.ToArray()
+    Save-ManagedEnvironmentState -Entries $remaining.ToArray()
 }

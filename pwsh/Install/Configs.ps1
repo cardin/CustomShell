@@ -8,10 +8,11 @@
 function Install-Configs {
     $manifest = @(Get-ManifestEntries)
 
-    Install-ConfigFile -Source (Join-Path $configDir 'espanso/_base.yml') `
-        -DestinationDir $EspansoMatchDir -Manifest ([ref]$manifest)
-    Install-ConfigFile -Source (Join-Path $configDir 'espanso/whitelist.yml') `
-        -DestinationDir $EspansoConfigDir -Manifest ([ref]$manifest)
+    foreach ($entry in (Get-ExpectedConfigEntries)) {
+        Install-ConfigFile -Source $entry.Source `
+            -DestinationDir (Split-Path -Parent $entry.Destination) `
+            -Manifest ([ref]$manifest)
+    }
 
     Save-ManifestEntries -Entries $manifest
 }
@@ -21,10 +22,7 @@ function Install-Configs {
 function Uninstall-Configs {
     $entries = @(Get-ManifestEntries)
     $sourcesByName = @{}
-    foreach ($source in @(
-            (Join-Path $configDir 'espanso/_base.yml')
-            (Join-Path $configDir 'espanso/whitelist.yml')
-        )) {
+    foreach ($source in @(Get-ExpectedConfigEntries | ForEach-Object { $_.Source })) {
         $sourcesByName[(Split-Path -Leaf $source)] = $source
     }
 
@@ -65,9 +63,20 @@ function Uninstall-Configs {
 # Get-ExpectedConfigPaths
 # Lists the destination paths the setup manages.
 function Get-ExpectedConfigPaths {
-    $paths = @(
-        (Join-Path $EspansoMatchDir '_base.yml')
-        (Join-Path $EspansoConfigDir 'whitelist.yml')
+    return @(Get-ExpectedConfigEntries | ForEach-Object { $_.Destination })
+}
+
+# Get-ExpectedConfigEntries
+# Pairs each shipped source with the destination that setup keeps current.
+function Get-ExpectedConfigEntries {
+    return @(
+        [pscustomobject]@{
+            Source      = Join-Path $configDir 'espanso/_base.yml'
+            Destination = Join-Path $EspansoMatchDir '_base.yml'
+        }
+        [pscustomobject]@{
+            Source      = Join-Path $configDir 'espanso/whitelist.yml'
+            Destination = Join-Path $EspansoConfigDir 'whitelist.yml'
+        }
     )
-    return $paths
 }

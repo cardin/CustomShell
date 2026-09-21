@@ -126,7 +126,7 @@ function New-TestTarGzip {
         [string] $Path,
 
         [Parameter(Mandatory)]
-        [string] $EntryName,
+        [string[]] $EntryName,
 
         [string] $Content = 'test payload',
 
@@ -136,44 +136,47 @@ function New-TestTarGzip {
         [string] $LinkName
     )
 
-    $header = New-Object byte[] 512
-    [Text.Encoding]::ASCII.GetBytes($EntryName).CopyTo($header, 0)
-    Set-TarOctalField $header 100 8 420
-    Set-TarOctalField $header 108 8 0
-    Set-TarOctalField $header 116 8 0
     [byte[]] $contentBytes = @()
     if ($EntryType -eq '0') {
         $contentBytes = [Text.Encoding]::UTF8.GetBytes($Content)
     }
-    Set-TarOctalField $header 124 12 $contentBytes.Length
-    Set-TarOctalField $header 136 12 0
-
-    for ($index = 148; $index -lt 156; $index++) {
-        $header[$index] = 32
-    }
-
-    $header[156] = [byte][char]$EntryType
-    if ($LinkName) {
-        [Text.Encoding]::ASCII.GetBytes($LinkName).CopyTo($header, 157)
-    }
-    [Text.Encoding]::ASCII.GetBytes("ustar`0").CopyTo($header, 257)
-    [Text.Encoding]::ASCII.GetBytes('00').CopyTo($header, 263)
-
-    $checksum = 0
-    foreach ($value in $header) {
-        $checksum += $value
-    }
-    $checksumText = [Convert]::ToString($checksum, 8).PadLeft(6, '0') + "`0 "
-    [Text.Encoding]::ASCII.GetBytes($checksumText).CopyTo($header, 148)
 
     $tarStream = New-Object IO.MemoryStream
     try {
-        $tarStream.Write($header, 0, $header.Length)
-        $tarStream.Write($contentBytes, 0, $contentBytes.Length)
+        foreach ($name in $EntryName) {
+            $header = New-Object byte[] 512
+            [Text.Encoding]::ASCII.GetBytes($name).CopyTo($header, 0)
+            Set-TarOctalField $header 100 8 420
+            Set-TarOctalField $header 108 8 0
+            Set-TarOctalField $header 116 8 0
+            Set-TarOctalField $header 124 12 $contentBytes.Length
+            Set-TarOctalField $header 136 12 0
 
-        $paddingLength = (512 - ($contentBytes.Length % 512)) % 512
-        if ($paddingLength -gt 0) {
-            $tarStream.Write((New-Object byte[] $paddingLength), 0, $paddingLength)
+            for ($index = 148; $index -lt 156; $index++) {
+                $header[$index] = 32
+            }
+
+            $header[156] = [byte][char]$EntryType
+            if ($LinkName) {
+                [Text.Encoding]::ASCII.GetBytes($LinkName).CopyTo($header, 157)
+            }
+            [Text.Encoding]::ASCII.GetBytes("ustar`0").CopyTo($header, 257)
+            [Text.Encoding]::ASCII.GetBytes('00').CopyTo($header, 263)
+
+            $checksum = 0
+            foreach ($value in $header) {
+                $checksum += $value
+            }
+            $checksumText = [Convert]::ToString($checksum, 8).PadLeft(6, '0') + "`0 "
+            [Text.Encoding]::ASCII.GetBytes($checksumText).CopyTo($header, 148)
+
+            $tarStream.Write($header, 0, $header.Length)
+            $tarStream.Write($contentBytes, 0, $contentBytes.Length)
+
+            $paddingLength = (512 - ($contentBytes.Length % 512)) % 512
+            if ($paddingLength -gt 0) {
+                $tarStream.Write((New-Object byte[] $paddingLength), 0, $paddingLength)
+            }
         }
         $tarStream.Write((New-Object byte[] 1024), 0, 1024)
         $tarStream.Position = 0
@@ -264,7 +267,7 @@ function New-TestTarGzip {
         $env:PATHEXT = $originalPathExt
         Remove-Item Env:MOCK_AGE_FAIL -ErrorAction SilentlyContinue
         Remove-Variable `
-            -Name CustomShellMoveCall, CustomShellPublishFailed, CustomShellFailFinalMove, CustomShellCollisionResponse `
+            -Name CustomShellMoveCall, CustomShellPublishFailed, CustomShellFailFinalMove, CustomShellCollisionResponse, CustomShellBackupMoveCount `
             -Scope Global `
             -ErrorAction SilentlyContinue
 
@@ -565,6 +568,37 @@ function New-TestTarGzip {
             Where-Object Name -Match '^\.customshell-decode-').Count | Should -Be 0
     }
 
+    It 'restores items backed up before merge preparation fails' {
+        $destination = Join-Path $testRoot 'restored'
+        $existingSource = Join-Path $destination 'source'
+        New-Item -ItemType Directory -Path $existingSource | Out-Null
+        Set-Content -LiteralPath (Join-Path $source 'second.txt') -Value 'new second'
+        Set-Content -LiteralPath (Join-Path $existingSource 'data.txt') -Value 'old data'
+        Set-Content -LiteralPath (Join-Path $existingSource 'second.txt') -Value 'old second'
+        $archive = (Protect-Tar -Source $source -Output $archiveBase).FullName
+        $global:CustomShellCollisionResponse = $true
+        $global:CustomShellBackupMoveCount = 0
+
+        Mock Move-CustomShellArchiveItem {
+            param($SourcePath, $DestinationPath)
+
+            if ($SourcePath.StartsWith($existingSource) -and $DestinationPath -match '[\\/]backup[\\/]') {
+                $global:CustomShellBackupMoveCount++
+                if ($global:CustomShellBackupMoveCount -eq 2) {
+                    throw 'simulated merge preparation failure'
+                }
+            }
+            Move-Item -LiteralPath $SourcePath -Destination $DestinationPath -ErrorAction Stop
+        } -ModuleName CustomShell.Commands
+
+        { Unprotect-Tar -Archive $archive -Destination $destination | Out-Null } |
+            Should -Throw '*simulated merge preparation failure*'
+        (Get-Content -LiteralPath (Join-Path $existingSource 'data.txt') -Raw).Trim() |
+            Should -Be 'old data'
+        (Get-Content -LiteralPath (Join-Path $existingSource 'second.txt') -Raw).Trim() |
+            Should -Be 'old second'
+    }
+
     It 'rejects archive entries that escape the destination' {
         $destination = Join-Path $testRoot 'restored'
         $archive = Join-Path $testRoot 'unsafe.enc'
@@ -580,6 +614,16 @@ function New-TestTarGzip {
 
         $didThrow | Should -Be $true
         Test-Path -LiteralPath (Join-Path $testRoot 'escape.txt') | Should -Be $false
+        Test-Path -LiteralPath $destination | Should -Be $false
+    }
+
+    It 'rejects archive entries with non-canonical path segments' {
+        $destination = Join-Path $testRoot 'restored'
+        $archive = Join-Path $testRoot 'alias-collision.enc'
+        New-TestTarGzip -Path $archive -EntryName @('top/file.txt', 'top/./file.txt')
+
+        { Unprotect-Tar -Archive $archive -Destination $destination | Out-Null } |
+            Should -Throw '*Unsafe archive entry*'
         Test-Path -LiteralPath $destination | Should -Be $false
     }
 

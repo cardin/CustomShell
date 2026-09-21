@@ -45,12 +45,12 @@ function Confirm-CustomShellArchiveCollision {
 function Protect-Tar {
     <#
     .SYNOPSIS
-    Compresses a file or folder and encrypts it using OpenSSL.
+    Compresses a file or folder and encrypts it using age.
 
     .DESCRIPTION
-    Creates a temporary tar.gz archive, encrypts it with AES-256-CBC and
-    PBKDF2, authenticates the result with HMAC-SHA-256, and publishes a new
-    timestamped .enc file only after every prior step succeeds.
+    Creates a temporary tar.gz archive, encrypts it with age's authenticated
+    passphrase mode, and publishes a new timestamped .enc file only after every
+    prior step succeeds.
 
     Prompts for the password and confirmation.
 
@@ -437,7 +437,7 @@ function Unprotect-Tar {
     Decrypts and extracts an archive created by Protect-Tar.
 
     .DESCRIPTION
-    Uses OpenSSL to decrypt the archive into a temporary tar.gz file,
+    Uses age to decrypt and authenticate the archive into a temporary tar.gz file,
     then validates its entries before extracting it using tar.exe. Extraction
     is staged separately and published transactionally so unsafe paths and
     failed operations do not leave partial destination changes. Symbolic-link
@@ -627,7 +627,9 @@ $ageText
                 [string]::IsNullOrWhiteSpace($normalizedEntry) -or
                 $normalizedEntry.StartsWith('/') -or
                 $normalizedEntry -match '^[A-Za-z]:' -or
-                $segments -contains '..'
+                $segments -contains '..' -or
+                $segments -contains '.' -or
+                $segments -contains ''
             ) {
                 throw "Unsafe archive entry: $entry"
             }
@@ -802,6 +804,10 @@ $ageText
                     ) {
                         New-Item -ItemType Directory -Path $backupPath -ErrorAction Stop |
                             Out-Null
+                        # Mark the merge before its first destination mutation.
+                        # Rollback must process entries already moved to backup
+                        # even when a later preparation step fails.
+                        $state.Merged = $true
                         $stagedChildren = @(Get-ChildItem -LiteralPath $stagedItem.FullName -Recurse -Force)
                         foreach ($child in $stagedChildren) {
                             $relativePath = $child.FullName.Substring($stagedItem.FullName.Length + 1)
@@ -828,8 +834,6 @@ $ageText
                                 $state.MergeNew.Add($relativePath)
                             }
                         }
-
-                        $state.Merged = $true
                         Get-ChildItem -LiteralPath $stagedItem.FullName -Force |
                             Copy-Item `
                                 -Destination $targetPath `

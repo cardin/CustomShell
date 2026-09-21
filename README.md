@@ -62,7 +62,7 @@ configuration but not the persistent environment values:
 - PowerShell also provides `Get-SSHConfig` for reading SSH host aliases.
 - Commands listed in `WslCommands` (`pwsh/Settings.psd1`) are exposed as
   PowerShell commands that run inside the default WSL distribution when no
-  native command exists. Currently `opencode` and `agent-deck`.
+  native command exists. Currently `opencode`.
 
 ## PowerShell tests
 

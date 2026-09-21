@@ -22,6 +22,7 @@ Describe 'WSL command exposure' {
         Remove-Item -Path "Function:\global:$testFunction" -ErrorAction SilentlyContinue
         Remove-Item -Path "Alias:\$testCommand" -ErrorAction SilentlyContinue
         Remove-Variable -Name customShellSettings -Scope Global -ErrorAction SilentlyContinue
+        Remove-Variable -Name CustomShellManagedWslCommands -Scope Global -ErrorAction SilentlyContinue
         $script:receivedWslArguments = $null
     }
 
@@ -58,5 +59,15 @@ Describe 'WSL command exposure' {
             Remove-Item -Path "Function:\global:$nativeName" -ErrorAction SilentlyContinue
             Remove-Item -Path "Alias:\$nativeName" -ErrorAction SilentlyContinue
         }
+    }
+
+    It 'removes a previously managed wrapper when settings change' {
+        $global:customShellSettings = @{ WslCommands = @() }
+
+        . $script:aliasScript
+
+        Get-Alias -Name $testCommand -ErrorAction SilentlyContinue | Should -BeNullOrEmpty
+        Get-Item -Path "Function:\global:$testFunction" -ErrorAction SilentlyContinue |
+            Should -BeNullOrEmpty
     }
 }

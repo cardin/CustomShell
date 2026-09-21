@@ -64,6 +64,10 @@ Import-Module -Name $customShellModulePath -Global -Force
 Remove-Variable -Name @(
     'customShellElapsed'
     'customShellModulePath'
+    'managedAlias'
+    'managedFunction'
+    'managedWslCommand'
+    'managedWslCommands'
     'customShellProcess'
     'customShellProcessId'
     'customShellProcessNames'

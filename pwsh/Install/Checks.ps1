@@ -59,12 +59,27 @@ function Invoke-Checks {
         $failures++
     }
 
-    $missing = @(Get-ExpectedConfigPaths | Where-Object { -not (Test-Path -LiteralPath $_) })
-    if ($missing.Count -eq 0) {
+    $expectedConfigs = @(Get-ExpectedConfigEntries)
+    $missing = @($expectedConfigs | Where-Object {
+            -not (Test-Path -LiteralPath $_.Destination -PathType Leaf)
+        })
+    $stale = @($expectedConfigs | Where-Object {
+            (Test-Path -LiteralPath $_.Destination -PathType Leaf) -and
+            (Get-FileHash -Algorithm SHA256 -LiteralPath $_.Source).Hash -ne
+            (Get-FileHash -Algorithm SHA256 -LiteralPath $_.Destination).Hash
+        })
+    if ($missing.Count -eq 0 -and $stale.Count -eq 0) {
         Write-Host '  configs:    installed'
     }
     else {
-        Write-Host "  configs:    $($missing.Count) missing - run Install.ps1"
+        $problems = @()
+        if ($missing.Count -gt 0) {
+            $problems += "$($missing.Count) missing"
+        }
+        if ($stale.Count -gt 0) {
+            $problems += "$($stale.Count) stale"
+        }
+        Write-Host "  configs:    $($problems -join ', ') - run Install.ps1"
         $failures++
     }
 

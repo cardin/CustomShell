@@ -83,12 +83,15 @@ unless noted):
   starship prompt) reads the repository theme. It is cleared when the prompt
   changes away from starship.
 
-On Windows these values are tracked in
-`%LOCALAPPDATA%\CustomShell\environment.txt`; `-Uninstall` clears values it still
-owns, and locally modified values are reported and kept. `CONDA_PATH` is
-recorded only when setup set it, and `STARSHIP_CONFIG` only while the starship
-prompt is selected. `-EnvironmentScope Process` applies changes to the current
-process only and exists so tests never touch the registry.
+On Windows these values and the exact values setup applied are tracked in
+`%LOCALAPPDATA%\CustomShell\environment.json`; `-Uninstall` clears values it
+still owns, and locally modified values are reported and kept. This ownership
+check also applies when a value is no longer desired after settings change.
+Legacy `environment.txt` state is read conservatively and migrated on the next
+successful install. `CONDA_PATH` is recorded only when setup set it, and
+`STARSHIP_CONFIG` only while the starship prompt is selected.
+`-EnvironmentScope Process` applies changes to the current process only and
+exists so tests never touch the registry.
 
 Processes already running before setup keep their old environment block, so a
 new session may not see new values until the environment refreshes (sign out and

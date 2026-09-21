@@ -52,6 +52,13 @@ Describe 'CustomShell Install.ps1' {
             return @(Get-Content -LiteralPath $script:fakeClinkLog)
         }
 
+        function Get-EnvironmentState {
+            if (-not (Test-Path -LiteralPath $script:environmentRecord)) {
+                return $null
+            }
+            return Get-Content -LiteralPath $script:environmentRecord -Raw | ConvertFrom-Json
+        }
+
         function New-TestSettings {
             param([string] $Prompt)
 
@@ -92,7 +99,7 @@ Describe 'CustomShell Install.ps1' {
         $script:espansoConfigDir = Join-Path $espansoRoot 'config'
         $script:clinkDir = Join-Path $testRoot 'clink'
         $script:stateDir = Join-Path $testRoot 'state'
-        $script:environmentRecord = Join-Path $stateDir 'environment.txt'
+        $script:environmentRecord = Join-Path $stateDir 'environment.json'
 
         $script:originalUvCerts = $env:UV_SYSTEM_CERTS
         Remove-Item Env:UV_SYSTEM_CERTS -ErrorAction SilentlyContinue
@@ -100,6 +107,9 @@ Describe 'CustomShell Install.ps1' {
         Remove-Item Env:WSLENV -ErrorAction SilentlyContinue
         $script:originalBatConfigPath = $env:BAT_CONFIG_PATH
         Remove-Item Env:BAT_CONFIG_PATH -ErrorAction SilentlyContinue
+        $script:originalStarshipConfig = $env:STARSHIP_CONFIG
+        Remove-Item Env:STARSHIP_CONFIG -ErrorAction SilentlyContinue
+        Remove-Item Env:FAKE_CLINK_FAIL_UNINSTALL -ErrorAction SilentlyContinue
 
         # Provide a fake conda.exe on PATH so discovery is deterministic and
         # never depends on the host's conda installation.
@@ -216,6 +226,10 @@ switch ($command) {
     }
     'uninstallscripts' {
         $path = $args[1]
+        if ($env:FAKE_CLINK_FAIL_UNINSTALL -eq '1') {
+            Write-Output "Failed to uninstall script path '$path'."
+            exit 7
+        }
         if ($state.scriptPaths -notcontains $path) {
             Write-Output "Script path '$path' is not installed."
             exit 1
@@ -261,6 +275,13 @@ switch ($command) {
         else {
             $env:BAT_CONFIG_PATH = $script:originalBatConfigPath
         }
+        if ($null -eq $script:originalStarshipConfig) {
+            Remove-Item Env:STARSHIP_CONFIG -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:STARSHIP_CONFIG = $script:originalStarshipConfig
+        }
+        Remove-Item Env:FAKE_CLINK_FAIL_UNINSTALL -ErrorAction SilentlyContinue
         $env:PATH = $script:originalPath
 
         $resolvedTestRoot = [IO.Path]::GetFullPath($testRoot)
@@ -350,7 +371,7 @@ switch ($command) {
         $result.Output | Should -Match 'Set Process environment variable WSLENV=USERPROFILE/up'
         $result.Output | Should -Match ([regex]::Escape("Set Process environment variable CONDA_PATH=$condaDir"))
         Test-Path -LiteralPath $environmentRecord | Should -Be $true
-        $recorded = Get-Content -LiteralPath $environmentRecord
+        $recorded = @((Get-EnvironmentState).entries.name)
         $recorded | Should -Contain 'UV_SYSTEM_CERTS'
         $recorded | Should -Contain 'BAT_CONFIG_PATH'
         $recorded | Should -Contain 'WSLENV'
@@ -365,7 +386,7 @@ switch ($command) {
         $result.ExitCode | Should -Be 0
         $result.Output | Should -Not -Match 'environment variable CONDA_PATH'
         if (Test-Path -LiteralPath $environmentRecord) {
-            (Get-Content -LiteralPath $environmentRecord) | Should -Not -Contain 'CONDA_PATH'
+            @((Get-EnvironmentState).entries.name) | Should -Not -Contain 'CONDA_PATH'
         }
 
         $uninstall = Invoke-Installer -Arguments @('-Uninstall')
@@ -457,6 +478,16 @@ switch ($command) {
         $configured.ExitCode | Should -Be 0
     }
 
+    It 'reports an installed configuration file as stale when it is modified' {
+        Invoke-Installer | Out-Null
+        Add-Content -LiteralPath (Join-Path $espansoMatchDir '_base.yml') -Value '# local change'
+
+        $result = Invoke-Installer -Arguments @('-Check')
+
+        $result.ExitCode | Should -Be 1
+        $result.Output | Should -Match 'configs:.*stale'
+    }
+
     It 'reports the required command state during a normal install' {
         $result = Invoke-Installer
 
@@ -542,7 +573,21 @@ switch ($command) {
 
         $clinkState = Get-FakeClinkState
         @($clinkState.settings.PSObject.Properties.Name) | Should -Not -Contain 'ohmyposh.theme'
-        (Get-Content -LiteralPath $environmentRecord) | Should -Contain 'STARSHIP_CONFIG'
+        @((Get-EnvironmentState).entries.name) | Should -Contain 'STARSHIP_CONFIG'
+    }
+
+    It 'keeps a managed environment value modified after install on uninstall' {
+        $settings = New-TestSettings -Prompt 'starship'
+        Invoke-Installer -SettingsPath $settings | Out-Null
+        $env:STARSHIP_CONFIG = 'C:\user\custom-starship.toml'
+
+        $noneSettings = New-TestSettings -Prompt 'none'
+        $result = Invoke-Installer -SettingsPath $noneSettings -Arguments @('-Uninstall')
+
+        $result.ExitCode | Should -Be 0
+        $result.Output | Should -Match 'Keeping modified environment variable STARSHIP_CONFIG'
+        $state = Get-EnvironmentState
+        @($state.entries.name) | Should -Contain 'STARSHIP_CONFIG'
     }
 
     It 'selects no Clink prompt when the CustomShell prompt is none' {
@@ -648,5 +693,26 @@ switch ($command) {
         @($calls | Where-Object { $_ -like 'config prompt use*' }).Count | Should -Be 0
         @($calls | Where-Object { $_ -like '*catppuccin_gruvbox.json*' }).Count | Should -Be 0
         @($calls | Where-Object { $_ -like 'installscripts *' -and $_ -notlike '*--list*' }).Count | Should -Be 0
+    }
+
+    It 'retains the previous Clink path state when migration cleanup fails' {
+        Invoke-Installer | Out-Null
+        $oldPath = Join-Path $testRoot 'old-clink-scripts'
+
+        $fake = Get-FakeClinkState
+        $fake.scriptPaths = @($fake.scriptPaths) + $oldPath
+        $fake | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $script:fakeClinkState
+
+        $statePath = Join-Path $stateDir 'clink.json'
+        $state = Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json
+        $state.scriptsPath = $oldPath
+        $state | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $statePath
+        $env:FAKE_CLINK_FAIL_UNINSTALL = '1'
+
+        $result = Invoke-Installer
+
+        $result.ExitCode | Should -Not -Be 0
+        (Get-Content -LiteralPath $statePath -Raw | ConvertFrom-Json).scriptsPath |
+            Should -Be $oldPath
     }
 }
