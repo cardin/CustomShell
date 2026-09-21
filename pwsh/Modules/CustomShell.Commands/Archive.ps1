@@ -1,6 +1,78 @@
 # Implements the paired commands for creating and extracting encrypted tar
-# archives with age. Temporary files, replacement safety, and extraction
-# path validation are handled here so callers receive consistent cleanup behavior.
+# archives with age. Path and portability validation are delegated to the shared
+# Python core in tools/archive_core.py; temporary files, replacement safety, and
+# extraction staging are handled here so callers receive consistent cleanup.
+
+function Get-CustomShellRepositoryRoot {
+    [CmdletBinding()]
+    param()
+
+    Split-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) -Parent
+}
+
+function Get-CustomShellArchiveCore {
+    [CmdletBinding()]
+    param()
+
+    Join-Path (Get-CustomShellRepositoryRoot) 'tools/archive_core.py'
+}
+
+function Get-CustomShellArchivePython {
+    [CmdletBinding()]
+    param()
+
+    foreach ($name in 'python3', 'python') {
+        $command = Get-Command $name -ErrorAction SilentlyContinue
+        if ($command) {
+            return $command
+        }
+    }
+    return $null
+}
+
+function Invoke-CustomShellArchiveCore {
+    <#
+    .SYNOPSIS
+    Runs the shared Python archive core and returns its standard output.
+
+    .DESCRIPTION
+    Resolves the interpreter and core script, runs the requested operation, and
+    throws a caller-supplied message when the core exits non-zero so the two
+    platforms fail the same way.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]
+        [string] $FailureMessage,
+
+        [Parameter(Mandatory)]
+        [string[]] $Arguments
+    )
+
+    $python = Get-CustomShellArchivePython
+
+    if (-not $python) {
+        throw 'Python 3.8 or newer was not found in PATH (python3 or python).'
+    }
+
+    $core = Get-CustomShellArchiveCore
+
+    if (-not (Test-Path -LiteralPath $core -PathType Leaf)) {
+        throw "Archive core was not found: $core"
+    }
+
+    $output = & $python.Source $core @Arguments 2>&1
+
+    if ($LASTEXITCODE -ne 0) {
+        $text = ($output | ForEach-Object { $_.ToString() }) -join "`n"
+        if ([string]::IsNullOrWhiteSpace($text)) {
+            throw $FailureMessage
+        }
+        throw "$FailureMessage`n$text"
+    }
+
+    return $output
+}
 
 function Move-CustomShellArchiveFile {
     [CmdletBinding()]
@@ -62,8 +134,9 @@ function Protect-Tar {
     _<yyyyMMdd_HHmmss>.enc. Defaults to the source path.
 
     .PARAMETER Exclude
-    Glob pattern(s) to omit from the archive, passed through to tar's
-    --exclude option. Repeatable.
+    Glob pattern(s) to omit from the archive. A pattern without "/" matches
+    basenames at any depth; a pattern containing "/" is anchored to the source
+    root. Repeatable.
 
     .PARAMETER NoIgnore
     Disable the default recursive .tarignore handling, so all files
@@ -128,8 +201,9 @@ PARAMETERS
         suffix and .enc extension. Defaults to the source path.
 
     --exclude <pattern>
-        Glob pattern to omit from the archive, passed through to tar's
-        --exclude option. Repeatable.
+        Glob pattern to omit from the archive. A pattern without "/" matches
+        basenames at any depth; a pattern containing "/" is anchored to the
+        source root. Repeatable.
 
     --no-ignore / -NoIgnore
         Disable the default recursive .tarignore handling, so all files
@@ -139,8 +213,8 @@ PARAMETERS
         Displays this help.
 
 NOTES
-    Requires tar.exe and age.exe. Encryption uses age with scrypt key
-    derivation and ChaCha20-Poly1305 authenticated encryption.
+    Requires Python 3.8 or newer, tar.exe, and age.exe. Encryption uses age with
+    scrypt key derivation and ChaCha20-Poly1305 authenticated encryption.
 '@
         return
     }
@@ -204,47 +278,22 @@ Install age or ensure age.exe is available in PATH.
         $sourceItem.Directory.FullName
     }
 
-    if ($sourceItem.FullName -eq [IO.Path]::GetPathRoot($sourceItem.FullName)) {
-        throw 'Refusing a filesystem root as source.'
-    }
-
     if ($Exclude.Count -gt 0 -and -not $sourceItem.PSIsContainer) {
         throw '-Exclude can only be used with a directory source.'
     }
 
-    $outputBase = if ([string]::IsNullOrWhiteSpace($Output)) {
-        $sourceItem.FullName
-    }
-    else {
-        $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Output)
-    }
-    $timestamp = Get-Date -Format 'yyyyMMdd_HHmmss'
-    $outputPath = "${outputBase}_${timestamp}.enc"
+    $resolveArguments = @('resolve-output', $sourceItem.FullName)
 
-    $outputExists = Test-Path -LiteralPath $outputPath
-
-    if ($outputExists) {
-        throw "Output file already exists: $outputPath"
+    if (-not [string]::IsNullOrWhiteSpace($Output)) {
+        $resolveArguments += $ExecutionContext.SessionState.Path.
+        GetUnresolvedProviderPathFromPSPath($Output)
     }
 
+    $outputPath = Invoke-CustomShellArchiveCore `
+        -FailureMessage 'Source or output path is not valid.' `
+        -Arguments $resolveArguments
+    $outputPath = [string](@($outputPath)[-1])
     $outputDirectory = Split-Path -Parent $outputPath
-
-    if (
-        $outputDirectory -and
-        -not (Test-Path -LiteralPath $outputDirectory -PathType Container)
-    ) {
-        throw "Output parent directory does not exist: $outputDirectory"
-    }
-
-    if (
-        $sourceItem.PSIsContainer -and
-        $outputPath.StartsWith(
-            "$($sourceItem.FullName.TrimEnd('\', '/'))$([IO.Path]::DirectorySeparatorChar)",
-            [StringComparison]::OrdinalIgnoreCase
-        )
-    ) {
-        throw 'Output cannot be created inside the source directory.'
-    }
 
     $temporaryTar = Join-Path `
     ([IO.Path]::GetTempPath()) `
@@ -256,73 +305,40 @@ Install age or ensure age.exe is available in PATH.
         $outputDirectory `
         ".$([IO.Path]::GetFileName($outputPath)).$([guid]::NewGuid()).tmp"
 
+    $listPath = $null
+
     try {
         Write-Progress -Activity 'Protect-Tar' -Status '[2/4] Packaging files...' -PercentComplete 25
         Write-Verbose "Creating temporary archive: $temporaryTar"
 
-        $tarignoreExcludes = @(
-            if ($sourceItem.PSIsContainer -and -not $NoIgnore) {
-                $ignoreFiles = @(Get-ChildItem -LiteralPath $sourceItem.FullName -Filter '.tarignore' -Recurse -Force -File -ErrorAction Stop)
-                foreach ($ignoreFile in $ignoreFiles) {
-                    $dir = $ignoreFile.Directory
-                    $relDir = if ($dir.FullName -eq $sourceItem.FullName) {
-                        ''
-                    }
-                    else {
-                        $dir.FullName.Substring($sourceItem.FullName.Length + 1).Replace('\', '/')
-                    }
-                    $lines = @(Get-Content -LiteralPath $ignoreFile.FullName -ErrorAction Stop)
-                    foreach ($line in $lines) {
-                        $trimmed = $line.Trim()
-                        if ([string]::IsNullOrWhiteSpace($trimmed) -or $trimmed.StartsWith('#')) {
-                            continue
-                        }
-                        if (-not ($trimmed.Contains('/') -or $trimmed.Contains('\'))) {
-                            if ([string]::IsNullOrEmpty($relDir)) {
-                                "--exclude=$trimmed"
-                            }
-                            else {
-                                "--exclude=*$($sourceItem.Name)/$relDir/$trimmed"
-                                "--exclude=*$($sourceItem.Name)/$relDir/$trimmed/*"
-                            }
-                        }
-                        else {
-                            $clean = $trimmed.TrimStart('/', '\').Replace('\', '/')
-                            if ([string]::IsNullOrEmpty($relDir)) {
-                                "--exclude=*$($sourceItem.Name)/$clean"
-                                "--exclude=*$($sourceItem.Name)/$clean/*"
-                            }
-                            else {
-                                "--exclude=*$($sourceItem.Name)/$relDir/$clean"
-                                "--exclude=*$($sourceItem.Name)/$relDir/$clean/*"
-                            }
-                        }
-                    }
-                }
-            }
-        )
+        # The shared Python core applies .tarignore and -Exclude and returns the
+        # authoritative entry list, so Windows archives exactly what Linux does.
+        $listPath = Join-Path ([IO.Path]::GetTempPath()) "$([guid]::NewGuid()).list"
+        $listArguments = @('list-source', $sourceItem.FullName, '--output', $listPath)
 
-        $excludeArgs = @(
-            foreach ($pattern in $Exclude) {
-                "--exclude=$pattern"
-            }
-            $tarignoreExcludes
-        )
+        if ($NoIgnore) {
+            $listArguments += '--no-ignore'
+        }
+
+        foreach ($pattern in $Exclude) {
+            $listArguments += '--exclude'
+            $listArguments += $pattern
+        }
+
+        $listOutput = Invoke-CustomShellArchiveCore `
+            -FailureMessage 'Source contains names that are not portable to Windows.' `
+            -Arguments $listArguments
+        $totalItems = [int](@($listOutput)[-1])
         Write-Verbose "Archiving '$($sourceItem.Name)' from '$sourceParentPath'."
 
-        $totalItems = if ($sourceItem.PSIsContainer) {
-            (Get-ChildItem -LiteralPath $sourceItem.FullName -Recurse -Force | Measure-Object).Count + 1
-        }
-        else {
-            1
-        }
         $count = 0
 
         $tarOutput = & $tar.Source `
             -czvf $temporaryTar `
-            @excludeArgs `
             -C $sourceParentPath `
-            ".\$($sourceItem.Name)" 2>&1 | ForEach-Object {
+            --null `
+            --no-recursion `
+            "--files-from=$listPath" 2>&1 | ForEach-Object {
             $line = $_.ToString()
             if ($line -match '^a\s') {
                 $count++
@@ -427,6 +443,10 @@ To resolve this issue:
             -LiteralPath $temporaryTar, $temporaryOutput `
             -Force `
             -ErrorAction SilentlyContinue
+
+        if ($listPath) {
+            Remove-Item -LiteralPath $listPath -Force -ErrorAction SilentlyContinue
+        }
     }
 }
 
@@ -507,9 +527,9 @@ PARAMETERS
         Displays this help.
 
 NOTES
-    Requires tar.exe and age.exe. Archives are decrypted and authenticated with
-    age before archive paths and link entries are validated and transactionally
-    extracted.
+    Requires Python 3.8 or newer, tar.exe, and age.exe. Archives are decrypted
+    and authenticated with age before the shared Python core validates archive
+    paths and link entries and the content is transactionally extracted.
 '@
         return
     }
@@ -551,26 +571,18 @@ Install age or ensure age.exe is available in PATH.
     GetUnresolvedProviderPathFromPSPath($Destination)
 
     $repositoryRoot = Split-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) -Parent
-    $normalizedDestination = [IO.Path]::GetFullPath($destinationPath).TrimEnd('\', '/')
-    $destinationRoot = [IO.Path]::GetPathRoot($normalizedDestination).TrimEnd('\', '/')
-    $protectedDestinations = @(
-        [IO.Path]::GetFullPath($HOME).TrimEnd('\', '/')
-        [IO.Path]::GetFullPath($repositoryRoot).TrimEnd('\', '/')
-    )
-
-    if (
-        [string]::IsNullOrWhiteSpace($normalizedDestination) -or
-        $normalizedDestination -eq $destinationRoot -or
-        $normalizedDestination -in $protectedDestinations
-    ) {
-        throw "Refusing to extract into protected destination: $normalizedDestination"
-    }
-
+    $destinationPath = Invoke-CustomShellArchiveCore `
+        -FailureMessage 'Destination is not valid.' `
+        -Arguments @(
+            'validate-destination'
+            $destinationPath
+            '--home'
+            $HOME
+            '--repository'
+            $repositoryRoot
+        )
+    $destinationPath = [string](@($destinationPath)[-1])
     $destinationExists = Test-Path -LiteralPath $destinationPath
-
-    if ($destinationExists -and -not (Test-Path -LiteralPath $destinationPath -PathType Container)) {
-        throw "'$destinationPath' is not a folder."
-    }
 
     $temporaryTar = Join-Path `
     ([IO.Path]::GetTempPath()) `
@@ -603,81 +615,13 @@ $ageText
         Write-Progress -Activity 'Unprotect-Tar' -Status '[2/4] Validating archive contents...' -PercentComplete 35
         Write-Verbose 'Validating archive entries.'
 
-        $archiveEntries = @(& $tar.Source -tzf $temporaryTar)
-
-        if ($LASTEXITCODE -ne 0) {
-            throw "tar.exe could not read the archive (exit code $LASTEXITCODE)."
-        }
-
-        $seenEntries = [Collections.Generic.HashSet[string]]::new(
-            [StringComparer]::OrdinalIgnoreCase
-        )
-        $topLevelEntries = [Collections.Generic.HashSet[string]]::new(
-            [StringComparer]::OrdinalIgnoreCase
-        )
-        foreach ($entry in $archiveEntries) {
-            $normalizedEntry = ([string] $entry).Replace('\', '/')
-            while ($normalizedEntry.StartsWith('./')) {
-                $normalizedEntry = $normalizedEntry.Substring(2)
-            }
-            $normalizedEntry = $normalizedEntry.TrimEnd('/')
-            $segments = $normalizedEntry -split '/'
-
-            if (
-                [string]::IsNullOrWhiteSpace($normalizedEntry) -or
-                $normalizedEntry.StartsWith('/') -or
-                $normalizedEntry -match '^[A-Za-z]:' -or
-                $segments -contains '..' -or
-                $segments -contains '.' -or
-                $segments -contains ''
-            ) {
-                throw "Unsafe archive entry: $entry"
-            }
-
-            foreach ($segment in $segments) {
-                $baseName = ($segment -split '\.', 2)[0]
-                if (
-                    $segment -match '[\x00-\x1f<>:"|?*]' -or
-                    $segment.EndsWith(' ') -or
-                    $segment.EndsWith('.') -or
-                    $baseName -match '^(?i:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$'
-                ) {
-                    throw "Archive entry cannot be recreated on Windows: $entry"
-                }
-            }
-
-            if (-not $seenEntries.Add($normalizedEntry)) {
-                throw "Archive contains duplicate or case-colliding entry: $entry"
-            }
-            $null = $topLevelEntries.Add($segments[0])
-        }
-
-        if ($topLevelEntries.Count -ne 1) {
-            throw 'Archive must contain exactly one top-level item.'
-        }
-
-        # Member names alone do not reveal where symbolic and hard links point.
-        # Reject link entries rather than depending on tar.exe's version-specific
-        # extraction policy to keep their targets inside the staging directory.
-        $archiveDetails = @(& $tar.Source -tvzf $temporaryTar)
-
-        if ($LASTEXITCODE -ne 0) {
-            throw "tar.exe could not inspect the archive (exit code $LASTEXITCODE)."
-        }
-
-        foreach ($detail in $archiveDetails) {
-            $detailText = [string] $detail
-            if (
-                $detailText -match '^[lh]' -or
-                $detailText -match '\s->\s' -or
-                $detailText -match '\slink to\s'
-            ) {
-                throw "Archive links are not supported: $detailText"
-            }
-            if ($detailText -notmatch '^[-d]') {
-                throw "Archive member type is not supported: $detailText"
-            }
-        }
+        # The shared Python core validates entry names, collisions, traversal,
+        # link targets, member types, and the single top-level rule identically
+        # on both platforms.
+        $validateOutput = Invoke-CustomShellArchiveCore `
+            -FailureMessage 'Archive contents are unsafe or not portable to Windows.' `
+            -Arguments @('validate-tar', $temporaryTar, 'windows')
+        $totalEntries = [int](@($validateOutput)[-1])
 
         New-Item `
             -ItemType Directory `
@@ -688,7 +632,6 @@ $ageText
         Write-Progress -Activity 'Unprotect-Tar' -Status '[3/4] Extracting files...' -PercentComplete 50
         Write-Verbose "Extracting archive into staging directory: $stagingDirectory"
 
-        $totalEntries = $archiveEntries.Count
         $extractCount = 0
 
         $tarExtractOutput = & $tar.Source `
@@ -716,9 +659,6 @@ $ageText
         Write-Progress -Activity 'Unprotect-Tar' -Status '[4/4] Merging and finalizing destination...' -PercentComplete 90
 
         $destinationParent = Split-Path -Parent $destinationPath
-        if (-not (Test-Path -LiteralPath $destinationParent -PathType Container)) {
-            throw "Destination parent directory does not exist: $destinationParent"
-        }
 
         # Prepare the transaction on the destination volume before changing the
         # destination. Publication uses renames and a file-level merge so only

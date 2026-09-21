@@ -20,6 +20,7 @@
         'node'
         'nvitop'
         'pipx'
+        'python'
         'rg'
         'vim'
         'zoxide'

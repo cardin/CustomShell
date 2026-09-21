@@ -1,2 +1,4 @@
 .codebase-index
 .vscode
+__pycache__/
+*.pyc

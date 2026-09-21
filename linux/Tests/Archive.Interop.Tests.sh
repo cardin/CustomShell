@@ -164,4 +164,62 @@ Unprotect-Tar "${pwsh_archives[0]}" "$test_root/bash-restored" >/dev/null ||
 [[ "$(tr -d '\r\n' <"$test_root/bash-restored/pwsh-source.txt")" == "pwsh payload" ]] ||
 	fail "Bash did not recreate the PowerShell input"
 
+# Both platforms must select the same members from the same tree for the same
+# .tarignore rules and --exclude patterns. Both front-ends now generate the
+# entry list with the shared Python core, so this checks that GNU tar and
+# bsdtar archive exactly that list.
+parity_source="$test_root/parity-source"
+mkdir -p \
+	"$parity_source/logs" \
+	"$parity_source/sub/logs" \
+	"$parity_source/sub/nested" \
+	"$parity_source/node_modules"
+printf 'logs/*.log\n*.tmp\n' >"$parity_source/.tarignore"
+printf 'nested/deep.bin\n' >"$parity_source/sub/.tarignore"
+echo keep >"$parity_source/keep.txt"
+echo tmp >"$parity_source/root.tmp"
+echo one >"$parity_source/logs/one.log"
+echo two >"$parity_source/logs/two.txt"
+echo three >"$parity_source/sub/logs/three.log"
+echo deep >"$parity_source/sub/nested/deep.bin"
+echo deeptxt >"$parity_source/sub/nested/deep.txt"
+echo dep >"$parity_source/node_modules/dep.txt"
+
+Protect-Tar --exclude node_modules "$parity_source" "$test_root/parity-bash" >/dev/null ||
+	fail "Bash parity Protect-Tar failed"
+bash_parity_archives=("$test_root"/parity-bash_*.enc)
+[[ ${#bash_parity_archives[@]} -eq 1 ]] || fail "Bash parity archive was not deterministic"
+bash_parity_cipher="$test_root/parity-bash.cipher"
+age -d -o "$bash_parity_cipher" "${bash_parity_archives[0]}" || fail "parity decryption failed"
+bash_parity_listing="$(tar -tzf "$bash_parity_cipher" | sed 's#^\./##' | sort)"
+
+CUSTOMSHELL_PARITY_SOURCE="$(wslpath -w "$parity_source")" || exit 1
+CUSTOMSHELL_PARITY_OUTPUT="$(wslpath -w "$test_root/parity-pwsh")" || exit 1
+export CUSTOMSHELL_PARITY_SOURCE CUSTOMSHELL_PARITY_OUTPUT
+export WSLENV="${WSLENV:+$WSLENV:}CUSTOMSHELL_PARITY_SOURCE:CUSTOMSHELL_PARITY_OUTPUT"
+
+pwsh.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -Command '
+    $ErrorActionPreference = "Stop"
+    $env:PATH = "$env:CUSTOMSHELL_INTEROP_ROOT\bin;$env:PATH"
+    . (Join-Path $env:CUSTOMSHELL_PROJECT_ROOT "pwsh/Modules/CustomShell.Commands/Archive.ps1")
+    Protect-Tar `
+        -Source $env:CUSTOMSHELL_PARITY_SOURCE `
+        -Output $env:CUSTOMSHELL_PARITY_OUTPUT `
+        -Exclude node_modules |
+        Out-Null
+' || fail "PowerShell parity Protect-Tar failed"
+pwsh_parity_archives=("$test_root"/parity-pwsh_*.enc)
+[[ ${#pwsh_parity_archives[@]} -eq 1 ]] || fail "PowerShell parity archive was not deterministic"
+pwsh_parity_cipher="$test_root/parity-pwsh.cipher"
+age -d -o "$pwsh_parity_cipher" "${pwsh_parity_archives[0]}" || fail "parity decryption failed"
+pwsh_parity_listing="$(tar -tzf "$pwsh_parity_cipher" | sed 's#^\./##' | sort)"
+
+if [[ "$bash_parity_listing" != "$pwsh_parity_listing" ]]; then
+	echo "Linux selected:" >&2
+	printf '%s\n' "$bash_parity_listing" >&2
+	echo "Windows selected:" >&2
+	printf '%s\n' "$pwsh_parity_listing" >&2
+	fail "Linux and Windows selected different archive members"
+fi
+
 echo "Archive interoperability tests passed"

@@ -18,7 +18,7 @@ fail() {
 
 PROJ_DIR="$(realpath -e -- "$(dirname "${BASH_SOURCE[0]}")/../..")"
 source "$(dirname "${BASH_SOURCE[0]}")/../commands/archive.sh"
-PYTHONDONTWRITEBYTECODE=1 python3 "$PROJ_DIR/linux/Tests/ArchiveAuth.Tests.py" -q ||
+PYTHONDONTWRITEBYTECODE=1 python3 "$PROJ_DIR/tools/Tests/ArchiveCore.Tests.py" -q ||
 	fail "archive validator unit tests failed"
 
 declare -F Protect-Tar >/dev/null || fail "Protect-Tar is not defined"
@@ -183,6 +183,55 @@ noignore_listing="$(tar -tzf "$noignore_cipher")"
 	fail "--no-ignore omitted a nested .tarignore-matched file"
 [[ "$noignore_listing" == *"ignored_dir"* ]] ||
 	fail "--no-ignore omitted a .tarignore-matched directory"
+
+# Path-containing .tarignore patterns are anchored to the directory holding the
+# file, so they exclude matching paths without leaking into nested directories.
+pathignore_source="$test_root/pathignore-source"
+mkdir -p "$pathignore_source/logs" "$pathignore_source/sub/logs" "$pathignore_source/sub/nested"
+echo "root log" >"$pathignore_source/logs/one.log"
+echo "keep log" >"$pathignore_source/logs/two.txt"
+echo "nested log" >"$pathignore_source/sub/logs/three.log"
+echo "deep" >"$pathignore_source/sub/nested/deep.bin"
+echo "deep keep" >"$pathignore_source/sub/nested/deep.txt"
+printf 'logs/*.log\n' >"$pathignore_source/.tarignore"
+printf 'nested/deep.bin\n' >"$pathignore_source/sub/.tarignore"
+pathignore_base="$test_root/pathignore-out"
+Protect-Tar "$pathignore_source" "$pathignore_base" >/dev/null ||
+	fail "Protect-Tar with path .tarignore patterns failed"
+pathignore_archives=("$pathignore_base"_*.enc)
+pathignore_cipher="$test_root/pathignore.cipher"
+age -d -o "$pathignore_cipher" "${pathignore_archives[0]}" || fail "archive decryption failed"
+pathignore_listing="$(tar -tzf "$pathignore_cipher")"
+[[ "$pathignore_listing" != *"logs/one.log"* ]] ||
+	fail ".tarignore path pattern did not exclude the anchored file"
+[[ "$pathignore_listing" == *"logs/two.txt"* ]] ||
+	fail ".tarignore path pattern removed an included sibling"
+[[ "$pathignore_listing" == *"sub/logs/three.log"* ]] ||
+	fail ".tarignore path pattern leaked into a nested directory"
+[[ "$pathignore_listing" != *"nested/deep.bin"* ]] ||
+	fail "nested .tarignore path pattern did not exclude its target"
+[[ "$pathignore_listing" == *"nested/deep.txt"* ]] ||
+	fail "nested .tarignore path pattern removed an included sibling"
+
+# --exclude path patterns are anchored to the source root.
+exclude_path_source="$test_root/exclude-path-source"
+mkdir -p "$exclude_path_source/logs" "$exclude_path_source/sub/logs"
+echo "root" >"$exclude_path_source/logs/one.log"
+echo "nested" >"$exclude_path_source/sub/logs/three.log"
+echo "keep" >"$exclude_path_source/keep.txt"
+exclude_path_base="$test_root/exclude-path"
+Protect-Tar --exclude 'logs/*.log' "$exclude_path_source" "$exclude_path_base" >/dev/null ||
+	fail "Protect-Tar with a path --exclude failed"
+exclude_path_archives=("$exclude_path_base"_*.enc)
+exclude_path_cipher="$test_root/exclude-path.cipher"
+age -d -o "$exclude_path_cipher" "${exclude_path_archives[0]}" || fail "archive decryption failed"
+exclude_path_listing="$(tar -tzf "$exclude_path_cipher")"
+[[ "$exclude_path_listing" != *"logs/one.log"* ]] ||
+	fail "--exclude path pattern did not exclude the anchored file"
+[[ "$exclude_path_listing" == *"sub/logs/three.log"* ]] ||
+	fail "--exclude path pattern leaked into a nested directory"
+[[ "$exclude_path_listing" == *"keep.txt"* ]] ||
+	fail "--exclude path pattern removed an included file"
 
 destination="$test_root/restored"
 Unprotect-Tar "$archive" "$destination" >/dev/null ||

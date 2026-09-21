@@ -9,7 +9,9 @@ Linux or WSL2 are the primary environments.
 Startup entry points compose small platform-specific files. Reusable PowerShell
 commands live in an import-safe module; importing it must not run profile setup
 or change external configuration. Shared tool configuration lives under
-`config/`.
+`config/`. Cross-platform helper code used by both shells lives under `tools/`;
+the archive commands share `tools/archive_core.py` for path, portability, and
+member validation and for generating the `Protect-Tar` entry list.
 
 ## Runtime principles
 

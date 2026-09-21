@@ -66,8 +66,8 @@ configuration but not the persistent environment values:
 
 ## PowerShell tests
 
-The PowerShell regression tests require Pester 5.0 or newer and `tar.exe` in
-`PATH`:
+The PowerShell regression tests require Pester 5.0 or newer, `tar.exe`, and
+Python 3.8 or newer (`python3` or `python`) in `PATH`:
 
 ```ps1
 Invoke-Pester ./pwsh/Tests

@@ -3,6 +3,30 @@
 # Defines the Linux commands for creating and extracting encrypted tar archives.
 # Sourcing this file only declares commands; it performs no startup work.
 
+# customshell_archive_require_tools
+# Fails unless every external command the archive commands depend on is in PATH.
+customshell_archive_require_tools() {
+	local tool
+	for tool in age tar realpath python3; do
+		if ! command -v "$tool" >/dev/null 2>&1; then
+			echo "Error: $tool not found in PATH."
+			return 1
+		fi
+	done
+}
+
+# customshell_archive_auth_helper
+# Prints the path to the shared Python archive core used for validation and
+# entry-list generation. PROJ_DIR is set by the entry point; the fallback keeps
+# the command usable when the file is sourced directly.
+customshell_archive_auth_helper() {
+	if [[ -n ${PROJ_DIR:-} ]]; then
+		printf '%s' "$PROJ_DIR/tools/archive_core.py"
+	else
+		realpath -e -- "$(dirname -- "${BASH_SOURCE[0]}")/../../tools/archive_core.py"
+	fi
+}
+
 # Protect-Tar
 # Compresses a source item and encrypts it with age.
 function Protect-Tar {
@@ -33,8 +57,9 @@ ARGUMENTS
 
 OPTIONS
     --exclude PATTERN
-        Glob pattern to omit from the archive, passed through to tar's
-        --exclude option. Repeatable.
+        Glob pattern to omit from the archive. A pattern without "/" matches
+        basenames at any depth; a pattern containing "/" is anchored to the
+        source root. Repeatable.
 
     --no-ignore
         Disable the default recursive .tarignore handling, so all files
@@ -94,27 +119,12 @@ EOF
 			return 1
 		fi
 
-		if ! command -v age >/dev/null 2>&1; then
-			echo "Error: age not found in PATH."
-			return 1
-		fi
-		if ! command -v tar >/dev/null 2>&1; then
-			echo "Error: tar not found in PATH."
-			return 1
-		fi
-		if ! command -v realpath >/dev/null 2>&1; then
-			echo "Error: realpath not found in PATH."
-			return 1
-		fi
-		if ! command -v python3 >/dev/null 2>&1; then
-			echo "Error: python3 not found in PATH."
+		if ! customshell_archive_require_tools; then
 			return 1
 		fi
 		local auth_helper
-		if [[ -n ${PROJ_DIR:-} ]]; then
-			auth_helper="$PROJ_DIR/linux/commands/archive_auth.py"
-		else
-			auth_helper="$(realpath -e -- "$(dirname -- "${BASH_SOURCE[0]}")/archive_auth.py")" || return 1
+		if ! auth_helper="$(customshell_archive_auth_helper)"; then
+			return 1
 		fi
 
 		local source_input="$1" source_parent source_name src
@@ -125,73 +135,56 @@ EOF
 		source_parent="$(realpath -e -- "$(dirname -- "$source_input")")" || return 1
 		source_name="$(basename -- "$source_input")"
 		src="$source_parent/$source_name"
-		if [[ "$src" == / ]]; then
-			echo "Error: Refusing filesystem root as source."
-			return 1
-		fi
 		if [[ ${#excludes[@]} -gt 0 && ! -d "$src" ]]; then
 			echo "Error: --exclude can only be used with a directory source."
 			return 1
 		fi
+		# Temp files are declared before the first failure point so the EXIT
+		# trap always has them in scope.
+		local tmp_tar="" tmp_out="" list_file=""
+		trap '[[ -z "$tmp_tar" ]] || rm -f -- "$tmp_tar"; [[ -z "$tmp_out" ]] || rm -f -- "$tmp_out"; [[ -z "$list_file" ]] || rm -f -- "$list_file"' EXIT
+
 		if [[ -t 1 ]]; then
 			echo "[1/4] Validating source paths..."
 		fi
-		local total_files
-		local -a validate_args=(validate-source "$src")
+		list_file="$(mktemp)" || return 1
+		chmod 600 -- "$list_file" || return 1
+		local -a list_args=(list-source "$src" --output "$list_file")
 		if [[ "$no_ignore" == true ]]; then
-			validate_args+=(--no-ignore)
+			list_args+=(--no-ignore)
 		fi
-		if ! total_files="$(python3 "$auth_helper" "${validate_args[@]}")"; then
+		local exclude_pattern
+		for exclude_pattern in "${excludes[@]}"; do
+			list_args+=(--exclude "$exclude_pattern")
+		done
+		local total_files
+		if ! total_files="$(python3 "$auth_helper" "${list_args[@]}")"; then
 			echo "Error: Source contains names that are not portable to Windows."
 			return 1
 		fi
+		total_files="${total_files//[[:space:]]/}"
 
-		local output_base="${2:-$src}" timestamp out
-		timestamp="$(date +%Y%m%d_%H%M%S)" || return 1
-		out="${output_base}_${timestamp}.enc"
-
+		local output_base="${2:-}" out
+		local -a resolve_args=(resolve-output "$src")
+		if [[ -n "$output_base" ]]; then
+			resolve_args+=("$output_base")
+		fi
+		if ! out="$(python3 "$auth_helper" "${resolve_args[@]}" 2>&1)"; then
+			printf 'Error: %s\n' "$out" >&2
+			return 1
+		fi
 		local out_dir out_name
-		out="$(realpath -m -- "$out")" || return 1
 		out_dir="$(dirname -- "$out")"
 		out_name="$(basename -- "$out")"
-		if [[ ! -d "$out_dir" ]]; then
-			echo "Error: Output parent directory does not exist: $out_dir"
-			return 1
-		fi
-		out_dir="$(realpath -e -- "$out_dir")" || return 1
-		out="$out_dir/$out_name"
-		if [[ -e "$out" || -L "$out" ]]; then
-			echo "Error: Output already exists: $out"
-			return 1
-		fi
-		if [[ -d "$src" ]]; then
-			local canonical_output
-			canonical_output="$(realpath -m -- "$out")" || return 1
-			if [[ "$canonical_output" == "$src"/* ]]; then
-				echo "Error: Output cannot be created inside the source directory."
-				return 1
-			fi
-		fi
 
-		local tmp_tar="" tmp_out=""
-		trap '[[ -z "$tmp_tar" ]] || rm -f -- "$tmp_tar"; [[ -z "$tmp_out" ]] || rm -f -- "$tmp_out"' EXIT
 		tmp_tar="$(mktemp --suffix=.tar.gz)" || return 1
 		tmp_out="$(mktemp --tmpdir="$out_dir" ".${out_name}.XXXXXX.tmp")" || return 1
 		chmod 600 -- "$tmp_tar" "$tmp_out" || return 1
 
-		local -a exclude_args=()
-		if [[ -d "$src" && "$no_ignore" != true ]]; then
-			exclude_args+=("--exclude-ignore-recursive=.tarignore")
-		fi
-		local exclude_pattern
-		for exclude_pattern in "${excludes[@]}"; do
-			exclude_args+=("--exclude=$exclude_pattern")
-		done
-
 		local tar_status=0
 		if [[ -t 1 && "$total_files" =~ ^[0-9]+$ && "$total_files" -gt 0 ]]; then
 			local count=0 pct=0
-			tar -czvf "$tmp_tar" "${exclude_args[@]}" -C "$source_parent" "./$source_name" 2>/dev/null | {
+			tar -czvf "$tmp_tar" -C "$source_parent" --null --no-recursion --files-from="$list_file" 2>/dev/null | {
 				while IFS= read -r _; do
 					((count++))
 					pct=$((count * 100 / total_files))
@@ -202,7 +195,7 @@ EOF
 			tar_status="${PIPESTATUS[0]}"
 			printf "\r\033[K[2/4] Packaging completed (100%%)\n"
 		else
-			tar -czf "$tmp_tar" "${exclude_args[@]}" -C "$source_parent" "./$source_name"
+			tar -czf "$tmp_tar" -C "$source_parent" --null --no-recursion --files-from="$list_file"
 			tar_status=$?
 		fi
 
@@ -227,11 +220,12 @@ EOF
 			return 1
 		fi
 		tmp_out=""
-		if ! rm -f -- "$tmp_tar"; then
+		if ! rm -f -- "$tmp_tar" "$list_file"; then
 			echo "Error: Archive was published, but temporary file cleanup failed." >&2
 			return 1
 		fi
 		tmp_tar=""
+		list_file=""
 		echo "Created: $out"
 	)
 }
@@ -275,27 +269,12 @@ EOF
 			return 1
 		fi
 
-		if ! command -v age >/dev/null 2>&1; then
-			echo "Error: age not found in PATH."
-			return 1
-		fi
-		if ! command -v tar >/dev/null 2>&1; then
-			echo "Error: tar not found in PATH."
-			return 1
-		fi
-		if ! command -v realpath >/dev/null 2>&1; then
-			echo "Error: realpath not found in PATH."
-			return 1
-		fi
-		if ! command -v python3 >/dev/null 2>&1; then
-			echo "Error: python3 not found in PATH."
+		if ! customshell_archive_require_tools; then
 			return 1
 		fi
 		local auth_helper
-		if [[ -n ${PROJ_DIR:-} ]]; then
-			auth_helper="$PROJ_DIR/linux/commands/archive_auth.py"
-		else
-			auth_helper="$(realpath -e -- "$(dirname -- "${BASH_SOURCE[0]}")/archive_auth.py")" || return 1
+		if ! auth_helper="$(customshell_archive_auth_helper)"; then
+			return 1
 		fi
 
 		local archive
@@ -306,39 +285,28 @@ EOF
 		fi
 
 		local requested_dest="${2:-.}"
-		if [[ -z "$requested_dest" || -L "$requested_dest" ]]; then
-			echo "Error: destination is empty or is a symbolic link."
-			return 1
-		fi
-
-		local dest home_path repository_path
-		dest="$(realpath -m -- "$requested_dest")" || return 1
-		home_path="$(realpath -m -- "${HOME:?HOME is not set}")" || return 1
+		local repository_root
 		if [[ -n ${PROJ_DIR:-} ]]; then
-			repository_path="$(realpath -m -- "$PROJ_DIR")" || return 1
+			repository_root="$PROJ_DIR"
 		else
-			repository_path="$(realpath -m -- "$(dirname -- "${BASH_SOURCE[0]}")/../..")" || return 1
+			repository_root="$(dirname -- "${BASH_SOURCE[0]}")/../.."
 		fi
-		if [[ "$dest" == / || "$dest" == "$home_path" || "$dest" == "$repository_path" ]]; then
-			echo "Error: Refusing protected destination: $dest"
-			return 1
-		fi
-		if [[ -e "$dest" && ! -d "$dest" ]]; then
-			echo "Error: '$dest' is not a directory."
+		local dest
+		if ! dest="$(python3 "$auth_helper" validate-destination "$requested_dest" \
+			--home "${HOME:?HOME is not set}" --repository "$repository_root" 2>&1)"; then
+			printf 'Error: %s\n' "$dest" >&2
 			return 1
 		fi
 
-		local tmp_tar="" list_file="" staging="" transaction=""
+		local tmp_tar="" staging="" transaction=""
 		local preserve_transaction=false
 		trap '
             [[ -z "$tmp_tar" ]] || rm -f -- "$tmp_tar"
-            [[ -z "$list_file" ]] || rm -f -- "$list_file"
             [[ -z "$staging" ]] || rm -rf -- "$staging"
             if [[ -n "$transaction" && "$preserve_transaction" != true ]]; then rm -rf -- "$transaction"; fi
         ' EXIT
 		tmp_tar="$(mktemp --suffix=.tar.gz)" || return 1
-		list_file="$(mktemp)" || return 1
-		chmod 600 -- "$tmp_tar" "$list_file" || return 1
+		chmod 600 -- "$tmp_tar" || return 1
 
 		if [[ -t 1 ]]; then
 			echo "[1/4] Decrypting and authenticating with age..."
@@ -357,35 +325,9 @@ EOF
 			return 1
 		fi
 
-		if ! tar -tzf "$tmp_tar" >"$list_file"; then
-			echo "Error: Failed to inspect archive."
-			return 1
-		fi
-
-		local entry component
-		while IFS= read -r entry; do
-			while [[ "$entry" == ./* ]]; do entry="${entry#./}"; done
-			if [[ "$entry" == /* ]]; then
-				echo "Error: Archive contains an absolute path: $entry"
-				return 1
-			fi
-			IFS='/' read -r -a components <<<"$entry"
-			for component in "${components[@]}"; do
-				if [[ "$component" == .. ]]; then
-					echo "Error: Archive contains path traversal: $entry"
-					return 1
-				fi
-			done
-		done <"$list_file"
 		local parent dest_name
 		parent="$(dirname -- "$dest")"
 		dest_name="$(basename -- "$dest")"
-		if [[ ! -d "$parent" ]]; then
-			echo "Error: Destination parent directory does not exist: $parent"
-			return 1
-		fi
-		parent="$(realpath -e -- "$parent")" || return 1
-		dest="$parent/$dest_name"
 		if [[ -d "$dest" ]]; then
 			staging="$(mktemp -d "$dest/.${dest_name}.stage.XXXXXX")" || return 1
 		else
@@ -596,12 +538,11 @@ EOF
 			staging=""
 		fi
 
-		if ! rm -f -- "$tmp_tar" "$list_file" || ! rm -rf -- "$staging"; then
+		if ! rm -f -- "$tmp_tar" || ! rm -rf -- "$staging"; then
 			echo "Error: Extracted content was published, but temporary file cleanup failed." >&2
 			return 1
 		fi
 		tmp_tar=""
-		list_file=""
 		staging=""
 		echo "Extracted to: $dest"
 	)

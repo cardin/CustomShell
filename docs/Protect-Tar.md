@@ -16,14 +16,17 @@ Unprotect-Tar --help
 - Both platforms must implement the same arguments, behavior, and exit status.
 - `--help` succeeds without checking dependencies or changing the filesystem.
 - `--exclude <pattern>` is optional and repeatable. It applies only to directory
-  input, uses archive-relative glob patterns, and combines repeated patterns.
-  Missing or empty patterns fail before any filesystem change.
+  input and combines repeated patterns. A pattern without `/` matches basenames
+  at any depth; a pattern containing `/` is anchored to the source root. Missing
+  or empty patterns fail before any filesystem change.
 - Directory archiving recursively applies exclusion rules from `.tarignore`
-  files by default (equivalent to GNU tar's `--exclude-ignore-recursive=.tarignore`).
-  Empty lines and lines beginning with `#` are ignored.
-  An unreadable `.tarignore` fails validation instead of silently archiving
-  paths that the file may have excluded.
-  `--no-ignore` disables this default handling so ignored files are archived.
+  files by default. A pattern without `/` matches basenames at any depth below
+  the `.tarignore` file; a pattern containing `/` is anchored to the directory
+  that holds the file and also covers the matching subtree. Empty lines and
+  lines beginning with `#` are ignored. An unreadable `.tarignore` fails
+  validation instead of silently archiving paths that the file may have
+  excluded. `--no-ignore` disables this default handling so ignored files are
+  archived.
 
 ## Input and output
 
@@ -59,16 +62,21 @@ in environment variables, or passed in process arguments.
 
 ## Requirements
 
+Both platforms use the shared Python archive core in `tools/archive_core.py` for
+path, portability, and archive-member validation and for generating the
+`Protect-Tar` entry list.
+
 Linux
 
-- Python 3.8 or newer for path and tar validation
-- `tar` (GNU or compatible with `--exclude-ignore-recursive`)
+- Python 3.8 or newer
+- `tar` (GNU tar, for `--files-from`, `--null`, and `--no-recursion`)
 - `realpath`
 - `age`
 
 Windows
 
 - Requires PowerShell 7
+- Python 3.8 or newer (`python3` or `python` in `PATH`)
 - `tar.exe` (bsdtar/libarchive)
 - `age.exe`.
 

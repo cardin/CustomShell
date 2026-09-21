@@ -349,20 +349,14 @@ function New-TestTarGzip {
         Test-Path -LiteralPath (Join-Path $destination 'source\ignored_dir') | Should -Be $false
     }
 
-    It 'does not publish an archive when a discovered .tarignore cannot be read' {
-        $ignorePath = Join-Path $source '.tarignore'
-        Set-Content -LiteralPath $ignorePath -Value '*.tmp'
-        Mock Get-Content {
-            throw [UnauthorizedAccessException]::new('simulated .tarignore read failure')
-        } -ModuleName CustomShell.Commands -ParameterFilter {
-            $LiteralPath -eq $ignorePath
-        }
+    It 'does not publish an archive when the shared core rejects the source' {
+        Set-Content -LiteralPath (Join-Path $source '.tarignore') -Value '*.tmp'
+        Mock Invoke-CustomShellArchiveCore {
+            throw 'simulated core validation failure'
+        } -ModuleName CustomShell.Commands
 
         { Protect-Tar $source $archiveBase | Out-Null } |
-            Should -Throw '*simulated .tarignore read failure*'
-        Should -Invoke Get-Content -ModuleName CustomShell.Commands -Times 1 -ParameterFilter {
-            $LiteralPath -eq $ignorePath -and $ErrorAction -eq 'Stop'
-        }
+            Should -Throw '*simulated core validation failure*'
         @(Get-ChildItem -LiteralPath $testRoot -Filter 'archive_*.enc').Count |
             Should -Be 0
     }
@@ -617,13 +611,13 @@ function New-TestTarGzip {
         Test-Path -LiteralPath $destination | Should -Be $false
     }
 
-    It 'rejects archive entries with non-canonical path segments' {
+    It 'rejects archive entries whose normalized paths collide' {
         $destination = Join-Path $testRoot 'restored'
         $archive = Join-Path $testRoot 'alias-collision.enc'
         New-TestTarGzip -Path $archive -EntryName @('top/file.txt', 'top/./file.txt')
 
         { Unprotect-Tar -Archive $archive -Destination $destination | Out-Null } |
-            Should -Throw '*Unsafe archive entry*'
+            Should -Throw '*duplicate or colliding archive path*'
         Test-Path -LiteralPath $destination | Should -Be $false
     }
 

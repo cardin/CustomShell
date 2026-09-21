@@ -9,8 +9,9 @@ behavior; this file contains only contribution guidance.
   files share state and depend on load order.
 - Guard optional integrations and preserve the terminal/tmux gates around
   startup output.
-- Keep platform code under `pwsh/` or `linux/` and shared tool configuration
-  under `config/`.
+- Keep platform code under `pwsh/` or `linux/`, shared tool configuration under
+  `config/`, and cross-platform helper code used by both platforms under
+  `tools/`.
 - Do not add user-specific data or rename public interfaces without documenting
   the compatibility impact.
 - Preserve OS-native line endings: CRLF for Windows scripts and LF for Unix
@@ -43,6 +44,9 @@ bash linux/Tests/Install.Tests.sh
 bash linux/Tests/Startup.Tests.sh
 bash linux/Tests/Wsl.Tests.sh
 ```
+
+The shared archive core under `tools/` is covered by
+`tools/Tests/ArchiveCore.Tests.py`, which `linux/Tests/Archive.Tests.sh` runs.
 
 Report a missing `shellcheck`. Do not source `linux/main.sh` in the user's
 normal shell during testing; use a disposable process and temporary `HOME`.
