@@ -9,9 +9,9 @@
 # write_block_lines
 # Prints the marker-delimited managed block.
 write_block_lines() {
-    printf '%s\n' "$marker_begin"
-    printf '%s\n' "${desired_block_lines[@]}"
-    printf '%s\n' "$marker_end"
+	printf '%s\n' "$marker_begin"
+	printf '%s\n' "${desired_block_lines[@]}"
+	printf '%s\n' "$marker_end"
 }
 
 # render_profile
@@ -19,141 +19,169 @@ write_block_lines() {
 # replaced on "write" and removed on "remove"; otherwise the file is passed
 # through unchanged. On "write", the block is appended when absent.
 render_profile() {
-    local action=$1
-    local -a lines=()
-    if [[ -f "$bashrc" ]]; then
-        mapfile -t lines <"$bashrc"
-    fi
+	local action=$1
+	local -a lines=()
+	if [[ -f "$bashrc" ]]; then
+		mapfile -t lines <"$bashrc"
+	fi
 
-    local start=-1 end=-1 i
-    for ((i = 0; i < ${#lines[@]}; i++)); do
-        if ((start < 0)) && [[ "${lines[i]}" == "$marker_begin" ]]; then
-            start=$i
-            continue
-        fi
-        if ((start >= 0)) && [[ "${lines[i]}" == "$marker_end" ]]; then
-            end=$i
-            break
-        fi
-    done
+	local start=-1 end=-1 i
+	for ((i = 0; i < ${#lines[@]}; i++)); do
+		if ((start < 0)) && [[ "${lines[i]}" == "$marker_begin" ]]; then
+			start=$i
+			continue
+		fi
+		if ((start >= 0)) && [[ "${lines[i]}" == "$marker_end" ]]; then
+			end=$i
+			break
+		fi
+	done
 
-    if ((start >= 0 && end >= 0)); then
-        local head_end=$((start - 1))
-        if [[ "$action" == "remove" ]] && ((head_end >= 0)) && [[ -z "${lines[head_end]}" ]]; then
-            head_end=$((head_end - 1))
-        fi
-        for ((i = 0; i <= head_end; i++)); do
-            printf '%s\n' "${lines[i]}"
-        done
-        if [[ "$action" == "write" ]]; then
-            write_block_lines
-        fi
-        for ((i = end + 1; i < ${#lines[@]}; i++)); do
-            printf '%s\n' "${lines[i]}"
-        done
-    elif [[ "$action" == "write" ]]; then
-        if ((${#lines[@]} > 0)); then
-            printf '%s\n' "${lines[@]}"
-            printf '\n'
-        fi
-        write_block_lines
-    elif ((${#lines[@]} > 0)); then
-        printf '%s\n' "${lines[@]}"
-    fi
+	if ((start >= 0 && end >= 0)); then
+		local head_end=$((start - 1))
+		if [[ "$action" == "remove" ]] && ((head_end >= 0)) && [[ -z "${lines[head_end]}" ]]; then
+			head_end=$((head_end - 1))
+		fi
+		for ((i = 0; i <= head_end; i++)); do
+			printf '%s\n' "${lines[i]}"
+		done
+		if [[ "$action" == "write" ]]; then
+			write_block_lines
+		fi
+		for ((i = end + 1; i < ${#lines[@]}; i++)); do
+			printf '%s\n' "${lines[i]}"
+		done
+	elif [[ "$action" == "write" ]]; then
+		if ((${#lines[@]} > 0)); then
+			printf '%s\n' "${lines[@]}"
+			printf '\n'
+		fi
+		write_block_lines
+	elif ((${#lines[@]} > 0)); then
+		printf '%s\n' "${lines[@]}"
+	fi
+}
+
+# profile_block_state
+# Prints "complete", "none", or "invalid" for the managed block. "invalid"
+# means the markers are duplicated or unbalanced, so the block boundaries
+# cannot be identified and rewriting could delete unrelated rc content.
+profile_block_state() {
+	[[ -f "$bashrc" ]] || {
+		printf 'none'
+		return 0
+	}
+	local -a lines=()
+	mapfile -t lines <"$bashrc"
+	local begins=0 ends=0 first_begin=-1 first_end=-1 i
+	for ((i = 0; i < ${#lines[@]}; i++)); do
+		if [[ "${lines[i]}" == "$marker_begin" ]]; then
+			begins=$((begins + 1))
+			((first_begin < 0)) && first_begin=$i
+		elif [[ "${lines[i]}" == "$marker_end" ]]; then
+			ends=$((ends + 1))
+			((first_end < 0)) && first_end=$i
+		fi
+	done
+	if ((begins == 0 && ends == 0)); then
+		printf 'none'
+	elif ((begins == 1 && ends == 1 && first_begin < first_end)); then
+		printf 'complete'
+	else
+		printf 'invalid'
+	fi
 }
 
 # profile_has_block
 # Succeeds when the rc file contains a complete managed block.
 profile_has_block() {
-    [[ -f "$bashrc" ]] || return 1
-    local -a lines=()
-    mapfile -t lines <"$bashrc"
-    local seen_begin=false line
-    for line in "${lines[@]}"; do
-        if [[ "$line" == "$marker_begin" ]]; then
-            seen_begin=true
-            continue
-        fi
-        if [[ "$seen_begin" == true && "$line" == "$marker_end" ]]; then
-            return 0
-        fi
-    done
-    return 1
+	[[ "$(profile_block_state)" == complete ]]
 }
 
 # profile_has_unmarked_source
 # Succeeds when the entry point is sourced without a managed block.
 profile_has_unmarked_source() {
-    [[ -f "$bashrc" ]] || return 1
-    grep -Fq "$entry_script" "$bashrc" && ! profile_has_block
+	[[ -f "$bashrc" ]] || return 1
+	grep -Fq "$entry_script" "$bashrc" && ! profile_has_block
 }
 
 # write_profile_block
 # Adds or refreshes the managed block atomically.
 write_profile_block() {
-    if profile_has_unmarked_source; then
-        say "Skipped profile update: $bashrc already sources CustomShell without a managed block." >&2
-        return 0
-    fi
+	local state
+	state="$(profile_block_state)"
+	if [[ "$state" == invalid ]]; then
+		say "Error: $bashrc has a malformed CustomShell block (duplicated or unbalanced markers); refusing to modify it." >&2
+		return 1
+	fi
 
-    local profile_dir tmp
-    profile_dir="$(dirname -- "$bashrc")"
-    if ! mkdir -p -- "$profile_dir"; then
-        say "Error: failed to create $profile_dir" >&2
-        return 1
-    fi
+	if profile_has_unmarked_source; then
+		say "Skipped profile update: $bashrc already sources CustomShell without a managed block." >&2
+		return 0
+	fi
 
-    tmp="$(mktemp "$profile_dir/.customshell.rc.XXXXXX")" || return 1
-    if [[ -f "$bashrc" ]]; then
-        chmod --reference="$bashrc" "$tmp" 2>/dev/null || true
-    fi
+	local profile_dir tmp
+	profile_dir="$(dirname -- "$bashrc")"
+	if ! mkdir -p -- "$profile_dir"; then
+		say "Error: failed to create $profile_dir" >&2
+		return 1
+	fi
 
-    if ! render_profile write >"$tmp"; then
-        rm -f -- "$tmp"
-        say "Error: failed to render the profile block." >&2
-        return 1
-    fi
+	tmp="$(mktemp "$profile_dir/.customshell.rc.XXXXXX")" || return 1
+	if [[ -f "$bashrc" ]]; then
+		chmod --reference="$bashrc" "$tmp" 2>/dev/null || true
+	fi
 
-    if [[ -f "$bashrc" ]] && cmp -s -- "$tmp" "$bashrc"; then
-        rm -f -- "$tmp"
-        return 0
-    fi
+	if ! render_profile write >"$tmp"; then
+		rm -f -- "$tmp"
+		say "Error: failed to render the profile block." >&2
+		return 1
+	fi
 
-    if [[ "$dry_run" == true ]]; then
-        rm -f -- "$tmp"
-        say "Would update profile block in $bashrc"
-        return 0
-    fi
+	if [[ -f "$bashrc" ]] && cmp -s -- "$tmp" "$bashrc"; then
+		rm -f -- "$tmp"
+		return 0
+	fi
 
-    if mv -f -- "$tmp" "$bashrc"; then
-        say "Updated profile block in $bashrc"
-        return 0
-    fi
+	if [[ "$dry_run" == true ]]; then
+		rm -f -- "$tmp"
+		say "Would update profile block in $bashrc"
+		return 0
+	fi
 
-    rm -f -- "$tmp"
-    say "Error: failed to write $bashrc" >&2
-    return 1
+	if mv -f -- "$tmp" "$bashrc"; then
+		say "Updated profile block in $bashrc"
+		return 0
+	fi
+
+	rm -f -- "$tmp"
+	say "Error: failed to write $bashrc" >&2
+	return 1
 }
 
 # remove_profile_block
 # Removes the managed block when present.
 remove_profile_block() {
-    if ! profile_has_block; then
-        return 0
-    fi
-    if [[ "$dry_run" == true ]]; then
-        say "Would remove profile block from $bashrc"
-        return 0
-    fi
+	if [[ "$(profile_block_state)" == invalid ]]; then
+		say "Error: $bashrc has a malformed CustomShell block (duplicated or unbalanced markers); refusing to modify it." >&2
+		return 1
+	fi
+	if ! profile_has_block; then
+		return 0
+	fi
+	if [[ "$dry_run" == true ]]; then
+		say "Would remove profile block from $bashrc"
+		return 0
+	fi
 
-    local tmp
-    tmp="$(mktemp "$(dirname -- "$bashrc")/.customshell.rc.XXXXXX")" || return 1
-    chmod --reference="$bashrc" "$tmp" 2>/dev/null || true
-    if render_profile remove >"$tmp" && mv -f -- "$tmp" "$bashrc"; then
-        say "Removed profile block from $bashrc"
-        return 0
-    fi
-    rm -f -- "$tmp"
-    say "Error: failed to update $bashrc" >&2
-    return 1
+	local tmp
+	tmp="$(mktemp "$(dirname -- "$bashrc")/.customshell.rc.XXXXXX")" || return 1
+	chmod --reference="$bashrc" "$tmp" 2>/dev/null || true
+	if render_profile remove >"$tmp" && mv -f -- "$tmp" "$bashrc"; then
+		say "Removed profile block from $bashrc"
+		return 0
+	fi
+	rm -f -- "$tmp"
+	say "Error: failed to update $bashrc" >&2
+	return 1
 }

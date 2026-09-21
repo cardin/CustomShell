@@ -43,13 +43,18 @@ report_checks() {
 	say "CustomShell setup check"
 	say "  repository: $project_dir"
 
-	if profile_has_block; then
+	local profile_state
+	profile_state="$(profile_block_state)"
+	if [[ "$profile_state" == complete ]]; then
 		if render_profile write | cmp -s - "$bashrc"; then
 			say "  profile:    current ($bashrc)"
 		else
 			say "  profile:    stale ($bashrc) - run install.sh"
 			check_failures=$((check_failures + 1))
 		fi
+	elif [[ "$profile_state" == invalid ]]; then
+		say "  profile:    malformed CustomShell block ($bashrc) - fix the markers"
+		check_failures=$((check_failures + 1))
 	elif profile_has_unmarked_source; then
 		say "  profile:    manually sourced and unmanaged ($bashrc)"
 	else

@@ -164,6 +164,23 @@ manual_output="$(HOME="$test_root/home" bash "$install_script" \
 [[ "$(md5_of "$manual_rc")" == "$manual_md5" ]] ||
 	fail "unmarked profile was modified"
 
+# A malformed managed block is refused instead of rewritten, so unrelated rc
+# content cannot be lost to unbalanced markers.
+malformed_rc="$test_root/malformed/.bashrc"
+mkdir -p "$test_root/malformed"
+printf '# before\n%s\n# orphaned customshell line\nalias keep=me\n' "$marker_begin" >"$malformed_rc"
+malformed_md5="$(md5_of "$malformed_rc")"
+if HOME="$test_root/home" bash "$install_script" \
+	--bashrc "$malformed_rc" --espanso-root "$test_root/malformed/espanso" >/dev/null 2>&1; then
+	fail "install accepted a malformed managed block"
+fi
+[[ "$(md5_of "$malformed_rc")" == "$malformed_md5" ]] ||
+	fail "malformed profile was modified"
+grep -Fq 'alias keep=me' "$malformed_rc" || fail "malformed profile lost unrelated content"
+HOME="$test_root/home" bash "$install_script" --check \
+	--bashrc "$malformed_rc" --espanso-root "$test_root/malformed/espanso" >/dev/null 2>&1 &&
+	fail "check passed for a malformed managed block"
+
 # Dry-run changes nothing and creates no links.
 dry_rc="$test_root/dry/.bashrc"
 mkdir -p "$test_root/dry"
