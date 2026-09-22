@@ -34,6 +34,12 @@ member validation and for generating the `Protect-Tar` entry list.
 - Shared tool configuration is read from the repository at runtime where
   possible. When a tool cannot do that, setup installs or registers the
   configuration as described in [Install.md](Install.md).
+- The shared `config/tmux.conf` advertises the OSC 52 (`Ms`) capability on both
+  the pane and client terminfo and enables DCS passthrough, so selections made
+  by OSC 52 terminal applications such as the OpenCode TUI reach the attached
+  terminal's clipboard (on WSL, the Windows clipboard) instead of stopping in
+  tmux's own buffer. Terminals without OSC 52 support ignore the sequence, and
+  pane copies stay available in the tmux buffer regardless.
 - Linux startup may manage a reusable `ssh-agent` and regenerate CustomShell's
   `environment.d` file. Linux setup owns its Git credential-helper setting;
   PowerShell startup does not change global Git configuration.
