@@ -14,6 +14,46 @@ if command -v code >/dev/null 2>&1; then
     export EDITOR="${EDITOR:-code --wait}"
 fi
 
+# Open links in the Windows browser on work devices so tools such as
+# `npm login` use the Windows-side GUI instead of requiring a Linux browser.
+# Raw Windows paths contain spaces, which sensible-browser splits when it
+# evals $BROWSER, so export a generated space-free wrapper that execs the
+# first installed Windows browser.
+if [[ "${IS_WORK_DEVICE:-false}" == true && -z ${BROWSER:-} && -n ${USERPROFILE:-} ]]; then
+    customshell_win_root="$(dirname -- "$(dirname -- "$USERPROFILE")")"
+    if [[ "$customshell_win_root" == /* && "$customshell_win_root" != / ]]; then
+        customshell_win_browser=""
+        for customshell_candidate in \
+            "$customshell_win_root/Program Files (x86)/Microsoft/Edge/Application/msedge.exe" \
+            "$customshell_win_root/Program Files/Microsoft/Edge/Application/msedge.exe" \
+            "$customshell_win_root/Program Files/Google/Chrome/Application/chrome.exe" \
+            "$customshell_win_root/Program Files (x86)/Google/Chrome/Application/chrome.exe"; do
+            if [[ -f "$customshell_candidate" ]]; then
+                customshell_win_browser="$customshell_candidate"
+                break
+            fi
+        done
+        if [[ -n "$customshell_win_browser" &&
+            "$customshell_win_browser" != *'"'* &&
+            "$customshell_win_browser" != *"'"* &&
+            "$customshell_win_browser" != *$'\n'* ]]; then
+            customshell_wrapper="${HOME:?HOME is not set}/.cache/customshell/windows-browser"
+            customshell_wrapper_content="$(printf '#!/bin/sh\n# Open files or URLs with the Windows browser from WSL.\n# CustomShell maintains this wrapper; see linux/platform/wsl.sh.\nexec "%s" "$@"\n' "$customshell_win_browser")"
+            if [[ ! -f "$customshell_wrapper" ||
+                "$(<"$customshell_wrapper")" != "$customshell_wrapper_content" ]]; then
+                mkdir -p -- "$(dirname -- "$customshell_wrapper")" &&
+                    printf '%s\n' "$customshell_wrapper_content" >"$customshell_wrapper" &&
+                    chmod 755 -- "$customshell_wrapper"
+            elif [[ ! -x "$customshell_wrapper" ]]; then
+                chmod 755 -- "$customshell_wrapper"
+            fi
+            [[ -x "$customshell_wrapper" ]] && export BROWSER="$customshell_wrapper"
+        fi
+    fi
+    unset customshell_win_root customshell_win_browser customshell_candidate
+    unset customshell_wrapper customshell_wrapper_content
+fi
+
 # wcd
 # Changes directory using a Windows-style path converted by wslpath.
 wcd() {
