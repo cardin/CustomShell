@@ -15,7 +15,9 @@ if [[ "$PRETTY_PROMPT" == ohmyposh && ${CUSTOMSHELL_OMP_INITIALIZED:-false} != t
 	if prompt_init="$(oh-my-posh init bash --strict --config "$PROJ_DIR/config/omp/$OMP_THEME.json" 2>/dev/null)" &&
 		[[ -n "$prompt_init" ]] && bash -n <<<"$prompt_init" 2>/dev/null; then
 		if eval "$prompt_init" 2>/dev/null; then
-			export CUSTOMSHELL_OMP_INITIALIZED=true
+			# Shell-local on purpose: exporting this leaks into child processes
+			# such as tmux panes and suppresses their own initialization.
+			CUSTOMSHELL_OMP_INITIALIZED=true
 		fi
 	fi
 	unset prompt_init
@@ -39,7 +41,9 @@ if [[ "$PRETTY_PROMPT" == starship && ${CUSTOMSHELL_STARSHIP_INITIALIZED:-false}
 	if prompt_init="$(starship init bash 2>/dev/null)" && [[ -n "$prompt_init" ]] &&
 		bash -n <<<"$prompt_init" 2>/dev/null; then
 		if eval "$prompt_init" 2>/dev/null; then
-			export CUSTOMSHELL_STARSHIP_INITIALIZED=true
+			# Shell-local on purpose: exporting this leaks into child processes
+			# such as tmux panes and suppresses their own initialization.
+			CUSTOMSHELL_STARSHIP_INITIALIZED=true
 		fi
 	fi
 	unset prompt_init

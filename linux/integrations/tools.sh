@@ -23,7 +23,9 @@ if [[ -d "$FNM_PATH" && ${CUSTOMSHELL_FNM_INITIALIZED:-false} != true ]]; then
 	if fnm_init="$(fnm env 2>/dev/null)" && [[ -n "$fnm_init" ]] &&
 		bash -n <<<"$fnm_init" 2>/dev/null; then
 		if eval "$fnm_init" 2>/dev/null; then
-			export CUSTOMSHELL_FNM_INITIALIZED=true
+			# Shell-local on purpose: exporting this leaks into child processes
+			# such as tmux panes and suppresses their own initialization.
+			CUSTOMSHELL_FNM_INITIALIZED=true
 		fi
 	fi
 	unset fnm_init
@@ -61,7 +63,9 @@ if command -v zoxide >/dev/null 2>&1 && [[ ${CUSTOMSHELL_ZOXIDE_INITIALIZED:-fal
 	if zoxide_init="$(zoxide init bash 2>/dev/null)" && [[ -n "$zoxide_init" ]] &&
 		bash -n <<<"$zoxide_init" 2>/dev/null; then
 		if eval "$zoxide_init" 2>/dev/null; then
-			export CUSTOMSHELL_ZOXIDE_INITIALIZED=true
+			# Shell-local on purpose: exporting this leaks into child processes
+			# such as tmux panes and suppresses their own initialization.
+			CUSTOMSHELL_ZOXIDE_INITIALIZED=true
 		fi
 	fi
 	unset zoxide_init
