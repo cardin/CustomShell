@@ -143,48 +143,59 @@ exclude_listing="$(tar -tzf "$exclude_cipher")"
 Protect-Tar --exclude >/dev/null 2>&1 &&
 	fail "Protect-Tar accepted --exclude without a pattern"
 
-tarignore_source="$test_root/tarignore-source"
-mkdir -p "$tarignore_source/sub" "$tarignore_source/ignored_dir"
-echo "keep" >"$tarignore_source/keep.txt"
-echo "drop" >"$tarignore_source/drop.tmp"
-echo "sub keep" >"$tarignore_source/sub/sub_keep.txt"
-echo "sub drop" >"$tarignore_source/sub/sub_drop.bin"
-echo "deep" >"$tarignore_source/ignored_dir/deep.txt"
-printf "*.tmp\nignored_dir\n# comment\n" >"$tarignore_source/.tarignore"
-printf "sub_drop.bin\n" >"$tarignore_source/sub/.tarignore"
-tarignore_base="$test_root/tarignore-out"
-Protect-Tar "$tarignore_source" "$tarignore_base" >/dev/null ||
-	fail "Protect-Tar with .tarignore failed"
-tarignore_archives=("$tarignore_base"_*.enc)
-tarignore_cipher="$test_root/tarignore.cipher"
-age -d -o "$tarignore_cipher" "${tarignore_archives[0]}" || fail "archive decryption failed"
-tarignore_listing="$(tar -tzf "$tarignore_cipher")"
-[[ "$tarignore_listing" == *"keep.txt"* ]] ||
-	fail ".tarignore removed an included file"
-[[ "$tarignore_listing" != *"drop.tmp"* ]] ||
-	fail ".tarignore did not omit root pattern *.tmp"
-[[ "$tarignore_listing" == *"sub_keep.txt"* ]] ||
-	fail ".tarignore removed included nested file"
-[[ "$tarignore_listing" != *"sub_drop.bin"* ]] ||
-	fail ".tarignore did not omit nested pattern sub_drop.bin"
-[[ "$tarignore_listing" != *"ignored_dir"* ]] ||
-	fail ".tarignore did not omit ignored directory"
+gitignore_source="$test_root/gitignore-source"
+mkdir -p "$gitignore_source/sub" "$gitignore_source/ignored_dir"
+echo "keep" >"$gitignore_source/keep.txt"
+echo "drop" >"$gitignore_source/drop.tmp"
+echo "example" >"$gitignore_source/keep.tmp"
+echo "sub keep" >"$gitignore_source/sub/sub_keep.txt"
+echo "sub drop" >"$gitignore_source/sub/sub_drop.bin"
+echo "deep" >"$gitignore_source/ignored_dir/deep.txt"
+printf '*.tmp\n!keep.tmp\nignored_dir/\n.git/\n# comment\n' >"$gitignore_source/.gitignore"
+printf 'sub_drop.bin\n' >"$gitignore_source/sub/.gitignore"
+printf 'keep.txt\n' >"$gitignore_source/.tarignore"
+git -C "$gitignore_source" init --quiet --template= || fail "fixture git init failed"
+git -C "$gitignore_source" add --force drop.tmp || fail "fixture git add failed"
+gitignore_index="$(sha256sum "$gitignore_source/.git/index")"
+gitignore_base="$test_root/gitignore-out"
+Protect-Tar "$gitignore_source" "$gitignore_base" >/dev/null ||
+	fail "Protect-Tar with .gitignore failed"
+gitignore_archives=("$gitignore_base"_*.enc)
+gitignore_cipher="$test_root/gitignore.cipher"
+age -d -o "$gitignore_cipher" "${gitignore_archives[0]}" || fail "archive decryption failed"
+gitignore_listing="$(tar -tzf "$gitignore_cipher")"
+[[ "$gitignore_listing" == *"keep.txt"* ]] ||
+	fail ".gitignore removed an included file or .tarignore was still applied"
+[[ "$gitignore_listing" == *"keep.tmp"* ]] ||
+	fail ".gitignore negation did not re-include a file"
+[[ "$gitignore_listing" != *"drop.tmp"* ]] ||
+	fail ".gitignore did not omit a tracked file"
+[[ "$gitignore_listing" == *"sub_keep.txt"* ]] ||
+	fail ".gitignore removed included nested file"
+[[ "$gitignore_listing" != *"sub_drop.bin"* ]] ||
+	fail ".gitignore did not omit nested pattern sub_drop.bin"
+[[ "$gitignore_listing" != *"ignored_dir"* ]] ||
+	fail ".gitignore did not omit ignored directory"
+[[ "$gitignore_index" == "$(sha256sum "$gitignore_source/.git/index")" ]] ||
+	fail "Protect-Tar changed the source Git index"
 
 noignore_base="$test_root/noignore-out"
-Protect-Tar --no-ignore "$tarignore_source" "$noignore_base" >/dev/null ||
+Protect-Tar --no-ignore --exclude .git "$gitignore_source" "$noignore_base" >/dev/null ||
 	fail "Protect-Tar with --no-ignore failed"
 noignore_archives=("$noignore_base"_*.enc)
 noignore_cipher="$test_root/noignore.cipher"
 age -d -o "$noignore_cipher" "${noignore_archives[0]}" || fail "archive decryption failed"
 noignore_listing="$(tar -tzf "$noignore_cipher")"
 [[ "$noignore_listing" == *"drop.tmp"* ]] ||
-	fail "--no-ignore omitted a .tarignore-matched file"
+	fail "--no-ignore omitted a .gitignore-matched tracked file"
 [[ "$noignore_listing" == *"sub_drop.bin"* ]] ||
-	fail "--no-ignore omitted a nested .tarignore-matched file"
+	fail "--no-ignore omitted a nested .gitignore-matched file"
 [[ "$noignore_listing" == *"ignored_dir"* ]] ||
-	fail "--no-ignore omitted a .tarignore-matched directory"
+	fail "--no-ignore omitted a .gitignore-matched directory"
+[[ "$noignore_listing" != *"/.git/"* ]] ||
+	fail "--no-ignore bypassed explicit --exclude"
 
-# Path-containing .tarignore patterns are anchored to the directory holding the
+# Path-containing .gitignore patterns are anchored to the directory holding the
 # file, so they exclude matching paths without leaking into nested directories.
 pathignore_source="$test_root/pathignore-source"
 mkdir -p "$pathignore_source/logs" "$pathignore_source/sub/logs" "$pathignore_source/sub/nested"
@@ -193,25 +204,43 @@ echo "keep log" >"$pathignore_source/logs/two.txt"
 echo "nested log" >"$pathignore_source/sub/logs/three.log"
 echo "deep" >"$pathignore_source/sub/nested/deep.bin"
 echo "deep keep" >"$pathignore_source/sub/nested/deep.txt"
-printf 'logs/*.log\n' >"$pathignore_source/.tarignore"
-printf 'nested/deep.bin\n' >"$pathignore_source/sub/.tarignore"
+printf 'logs/*.log\n' >"$pathignore_source/.gitignore"
+printf 'nested/deep.bin\n' >"$pathignore_source/sub/.gitignore"
 pathignore_base="$test_root/pathignore-out"
 Protect-Tar "$pathignore_source" "$pathignore_base" >/dev/null ||
-	fail "Protect-Tar with path .tarignore patterns failed"
+	fail "Protect-Tar with path .gitignore patterns failed"
 pathignore_archives=("$pathignore_base"_*.enc)
 pathignore_cipher="$test_root/pathignore.cipher"
 age -d -o "$pathignore_cipher" "${pathignore_archives[0]}" || fail "archive decryption failed"
 pathignore_listing="$(tar -tzf "$pathignore_cipher")"
 [[ "$pathignore_listing" != *"logs/one.log"* ]] ||
-	fail ".tarignore path pattern did not exclude the anchored file"
+	fail ".gitignore path pattern did not exclude the anchored file"
 [[ "$pathignore_listing" == *"logs/two.txt"* ]] ||
-	fail ".tarignore path pattern removed an included sibling"
+	fail ".gitignore path pattern removed an included sibling"
 [[ "$pathignore_listing" == *"sub/logs/three.log"* ]] ||
-	fail ".tarignore path pattern leaked into a nested directory"
+	fail ".gitignore path pattern leaked into a nested directory"
 [[ "$pathignore_listing" != *"nested/deep.bin"* ]] ||
-	fail "nested .tarignore path pattern did not exclude its target"
+	fail "nested .gitignore path pattern did not exclude its target"
 [[ "$pathignore_listing" == *"nested/deep.txt"* ]] ||
-	fail "nested .tarignore path pattern removed an included sibling"
+	fail "nested .gitignore path pattern removed an included sibling"
+
+# Git matcher failures must not publish output or leave private staging data.
+mkdir -p "$test_root/git-failure-temp"
+cat >"$test_root/bin/git" <<'EOF'
+#!/usr/bin/env bash
+echo "simulated Git matcher failure" >&2
+exit 128
+EOF
+chmod +x "$test_root/bin/git"
+TMPDIR="$test_root/git-failure-temp" Protect-Tar "$gitignore_source" "$test_root/git-failed" \
+	>/dev/null 2>&1 && fail "Protect-Tar succeeded when Git failed"
+[[ -z "$(ls -A "$test_root/git-failure-temp")" ]] ||
+	fail "Git failure left temporary metadata or an entry list"
+git_failed_archives=("$test_root"/git-failed_*.enc)
+[[ ! -e "${git_failed_archives[0]}" ]] || fail "Git failure published an archive"
+Protect-Tar --no-ignore --exclude .git "$gitignore_source" "$test_root/git-bypassed" \
+	>/dev/null || fail "--no-ignore did not bypass unavailable Git"
+rm -f -- "$test_root/bin/git"
 
 # --exclude path patterns are anchored to the source root.
 exclude_path_source="$test_root/exclude-path-source"

@@ -11,14 +11,28 @@ fail() {
 	exit 1
 }
 
-if ! command -v pwsh.exe >/dev/null 2>&1 || ! command -v wslpath >/dev/null 2>&1; then
+if ! command -v wslpath >/dev/null 2>&1; then
 	echo "Archive interoperability tests skipped: Windows PowerShell 7 is unavailable"
 	exit 0
 fi
 
+pwsh_command=""
+for candidate in pwsh.exe pwsh_guest.exe; do
+	# Presence in PATH does not mean Windows policy permits execution.
+	if command -v "$candidate" >/dev/null 2>&1 &&
+		windows_temp="$("$candidate" -NoLogo -NoProfile -Command '[IO.Path]::GetTempPath()' 2>/dev/null)"; then
+		pwsh_command="$candidate"
+		windows_temp="${windows_temp//$'\r'/}"
+		break
+	fi
+done
+if [[ -z "$pwsh_command" ]]; then
+	echo "Archive interoperability tests skipped: neither pwsh.exe nor pwsh_guest.exe is runnable"
+	exit 0
+fi
+
 project_root="$(realpath -e -- "$(dirname -- "${BASH_SOURCE[0]}")/../..")" || exit 1
-windows_temp="$(pwsh.exe -NoLogo -NoProfile -Command '[IO.Path]::GetTempPath()' | tr -d '\r')"
-test_parent="$(wslpath -u "$windows_temp")"
+test_parent="$(wslpath -u "$windows_temp")" || exit 1
 test_root="$(mktemp -d "$test_parent/CustomShell-Interop.XXXXXX")" || exit 1
 trap 'rm -rf -- "$test_root"' EXIT
 
@@ -121,7 +135,7 @@ EOF
 
 cat >"$test_root/bin/age.cmd" <<'EOF'
 @echo off
-pwsh.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0mock_age.ps1" %*
+"%CUSTOMSHELL_TEST_PWSH%" -NoProfile -ExecutionPolicy Bypass -File "%~dp0mock_age.ps1" %*
 exit /b %ERRORLEVEL%
 EOF
 
@@ -140,8 +154,9 @@ CUSTOMSHELL_PROJECT_ROOT="$(wslpath -w "$project_root")" || exit 1
 export CUSTOMSHELL_INTEROP_ROOT CUSTOMSHELL_INTEROP_ARCHIVE CUSTOMSHELL_PROJECT_ROOT
 export WSLENV="${WSLENV:+$WSLENV:}CUSTOMSHELL_INTEROP_ROOT:CUSTOMSHELL_INTEROP_ARCHIVE:CUSTOMSHELL_PROJECT_ROOT"
 
-pwsh.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -Command '
+"$pwsh_command" -NoLogo -NoProfile -ExecutionPolicy Bypass -Command '
     $ErrorActionPreference = "Stop"
+    $env:CUSTOMSHELL_TEST_PWSH = (Get-Process -Id $PID).Path
     $env:PATH = "$env:CUSTOMSHELL_INTEROP_ROOT\bin;$env:PATH"
     . (Join-Path $env:CUSTOMSHELL_PROJECT_ROOT "pwsh/Modules/CustomShell.Commands/Archive.ps1")
     Unprotect-Tar `
@@ -165,7 +180,7 @@ Unprotect-Tar "${pwsh_archives[0]}" "$test_root/bash-restored" >/dev/null ||
 	fail "Bash did not recreate the PowerShell input"
 
 # Both platforms must select the same members from the same tree for the same
-# .tarignore rules and --exclude patterns. Both front-ends now generate the
+# .gitignore rules and --exclude patterns. Both front-ends now generate the
 # entry list with the shared Python core, so this checks that GNU tar and
 # bsdtar archive exactly that list.
 parity_source="$test_root/parity-source"
@@ -173,17 +188,23 @@ mkdir -p \
 	"$parity_source/logs" \
 	"$parity_source/sub/logs" \
 	"$parity_source/sub/nested" \
-	"$parity_source/node_modules"
-printf 'logs/*.log\n*.tmp\n' >"$parity_source/.tarignore"
-printf 'nested/deep.bin\n' >"$parity_source/sub/.tarignore"
+	"$parity_source/node_modules" \
+	"$parity_source/build/deep"
+printf 'logs/*.log\n*.tmp\n!keep.tmp\nbuild/\n.git/\n' >"$parity_source/.gitignore"
+printf 'nested/deep.bin\n' >"$parity_source/sub/.gitignore"
 echo keep >"$parity_source/keep.txt"
 echo tmp >"$parity_source/root.tmp"
+echo keep >"$parity_source/keep.tmp"
 echo one >"$parity_source/logs/one.log"
 echo two >"$parity_source/logs/two.txt"
 echo three >"$parity_source/sub/logs/three.log"
 echo deep >"$parity_source/sub/nested/deep.bin"
 echo deeptxt >"$parity_source/sub/nested/deep.txt"
 echo dep >"$parity_source/node_modules/dep.txt"
+echo generated >"$parity_source/build/deep/output.txt"
+git -C "$parity_source" init --quiet --template= || fail "parity git init failed"
+git -C "$parity_source" add --force root.tmp || fail "parity git add failed"
+parity_index="$(sha256sum "$parity_source/.git/index")"
 
 Protect-Tar --exclude node_modules "$parity_source" "$test_root/parity-bash" >/dev/null ||
 	fail "Bash parity Protect-Tar failed"
@@ -198,8 +219,9 @@ CUSTOMSHELL_PARITY_OUTPUT="$(wslpath -w "$test_root/parity-pwsh")" || exit 1
 export CUSTOMSHELL_PARITY_SOURCE CUSTOMSHELL_PARITY_OUTPUT
 export WSLENV="${WSLENV:+$WSLENV:}CUSTOMSHELL_PARITY_SOURCE:CUSTOMSHELL_PARITY_OUTPUT"
 
-pwsh.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -Command '
+"$pwsh_command" -NoLogo -NoProfile -ExecutionPolicy Bypass -Command '
     $ErrorActionPreference = "Stop"
+    $env:CUSTOMSHELL_TEST_PWSH = (Get-Process -Id $PID).Path
     $env:PATH = "$env:CUSTOMSHELL_INTEROP_ROOT\bin;$env:PATH"
     . (Join-Path $env:CUSTOMSHELL_PROJECT_ROOT "pwsh/Modules/CustomShell.Commands/Archive.ps1")
     Protect-Tar `
@@ -221,5 +243,15 @@ if [[ "$bash_parity_listing" != "$pwsh_parity_listing" ]]; then
 	printf '%s\n' "$pwsh_parity_listing" >&2
 	fail "Linux and Windows selected different archive members"
 fi
+[[ "$pwsh_parity_listing" != *"root.tmp"* ]] ||
+	fail "tracked .gitignore-matched file was archived"
+[[ "$pwsh_parity_listing" == *"keep.tmp"* ]] ||
+	fail ".gitignore negation did not re-include a file"
+[[ "$pwsh_parity_listing" != *"/build/"* ]] ||
+	fail "directory-only .gitignore rule did not prune build output"
+[[ "$pwsh_parity_listing" != *"deep.bin"* ]] ||
+	fail "nested .gitignore rule did not omit its target"
+[[ "$parity_index" == "$(sha256sum "$parity_source/.git/index")" ]] ||
+	fail "archive creation changed the source Git index"
 
 echo "Archive interoperability tests passed"

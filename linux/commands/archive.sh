@@ -62,14 +62,15 @@ OPTIONS
         source root. Repeatable.
 
     --no-ignore
-        Disable the default recursive .tarignore handling, so all files
-        including those matched by .tarignore files are archived.
+        Disable recursive .gitignore handling. Otherwise matching paths are
+        omitted even if tracked by Git. Explicit --exclude rules still apply.
 
     --help
         Displays this help.
 
 NOTES
-    Requires tar, realpath, Python 3, and age. The command prompts for a
+    Requires tar, realpath, Python 3, and age; directory .gitignore handling
+    also requires Git. The command prompts for a
     passphrase. Encryption uses age with scrypt key derivation and
     ChaCha20-Poly1305 authenticated encryption.
 EOF
@@ -159,7 +160,7 @@ EOF
 		done
 		local total_files
 		if ! total_files="$(python3 "$auth_helper" "${list_args[@]}")"; then
-			echo "Error: Source contains names that are not portable to Windows."
+			echo "Error: Source validation or .gitignore handling failed."
 			return 1
 		fi
 		total_files="${total_files//[[:space:]]/}"

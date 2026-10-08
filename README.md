@@ -62,6 +62,9 @@ links (for example `npm login`) in the installed Windows browser; an existing
 
 - `Show-Help` displays the compact CustomShell command reference in both shells.
 - `Protect-Tar` and `Unprotect-Tar` create and extract encrypted archives. See [Protect-Tar.md](docs/Protect-Tar.md).
+  `Protect-Tar` uses recursive `.gitignore` rules, including for tracked files.
+  Directory archiving requires Git unless `--no-ignore` is passed.
+  Explicit `--exclude` rules still apply.
 - `mirror-win-ssh` mirrors the Windows SSH directory into WSL. See [Mirror-Win-Ssh.md](docs/Mirror-Win-Ssh.md).
 - PowerShell also provides `Get-SSHConfig` for reading SSH host aliases.
 - Commands listed in `WslCommands` (`pwsh/Settings.psd1`) are exposed as
@@ -70,7 +73,7 @@ links (for example `npm login`) in the installed Windows browser; an existing
 
 ## PowerShell tests
 
-The PowerShell regression tests require Pester 5.0 or newer, `tar.exe`, and
+The PowerShell regression tests require Pester 5.0 or newer, Git, `tar.exe`, and
 Python 3.8 or newer (`python3` or `python`) in `PATH`:
 
 ```ps1

@@ -4,14 +4,18 @@
 
 from __future__ import annotations
 
+import contextlib
 import datetime
 import fnmatch
 import os
 import pathlib
 import posixpath
 import re
+import subprocess
 import sys
 import tarfile
+import tempfile
+from typing import Iterator
 
 
 WINDOWS_DRIVE_PREFIX = re.compile(r"^[A-Za-z]:")
@@ -39,28 +43,72 @@ def validate_windows_name(name: str) -> None:
         raise ValueError(f"archive name is not portable to Windows: {name!r}")
 
 
-def is_tarignored(
-    rel_path: str, ignore_rules: list[tuple[str, str]]
-) -> bool:
-    for base_dir, pattern in ignore_rules:
-        if base_dir:
-            if not (rel_path == base_dir or rel_path.startswith(base_dir + "/")):
-                continue
-            in_scope = rel_path[len(base_dir) + 1:] if rel_path != base_dir else ""
-        else:
-            in_scope = rel_path
+@contextlib.contextmanager
+def gitignore_context(
+    source_path: pathlib.Path,
+) -> Iterator[tuple[list[str], dict[str, str]]]:
+    """Use Git's matcher without reading or modifying source repository metadata.
 
-        if not pattern:
-            continue
-        if "/" not in pattern:
-            name = pathlib.PurePosixPath(rel_path).name
-            if fnmatch.fnmatch(name, pattern):
-                return True
-        else:
-            pat = pattern.lstrip("/")
-            if fnmatch.fnmatch(in_scope, pat) or fnmatch.fnmatch(in_scope, pat + "/*"):
-                return True
-    return False
+    Only .gitignore files within the source tree apply. An empty, temporary Git
+    directory and --no-index make tracking status irrelevant. User/system Git
+    configuration, environment overrides, templates and info/exclude cannot add
+    exclusions or change matching behavior between platforms.
+    """
+    environment = {
+        key: value for key, value in os.environ.items()
+        if not key.upper().startswith("GIT_")
+    }
+    environment.update(GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull)
+    with tempfile.TemporaryDirectory(prefix="customshell-gitignore-") as temporary:
+        git_dir = pathlib.Path(temporary).resolve()
+        source = source_path.resolve()
+        if is_within(git_dir, source):
+            raise ValueError("temporary Git metadata cannot be inside the source directory")
+        try:
+            initialized = subprocess.run(
+                ["git", "init", "--bare", "--quiet", "--template=", str(git_dir)],
+                cwd=git_dir, env=environment, capture_output=True,
+            )
+        except FileNotFoundError as error:
+            raise ValueError(
+                "Git is required for .gitignore handling; install Git or use --no-ignore"
+            ) from error
+        if initialized.returncode != 0:
+            raise ValueError(
+                "cannot initialize .gitignore matcher: "
+                + initialized.stderr.decode("utf-8", "replace").strip()
+            )
+        command = [
+            "git", f"--git-dir={git_dir}", f"--work-tree={source}",
+            "-c", "core.bare=false", "-c", "core.ignoreCase=false",
+            "-c", f"core.excludesFile={os.devnull}",
+            "check-ignore", "--no-index", "-z", "--stdin",
+        ]
+        yield command, environment
+
+
+def gitignored_paths(
+    matcher: tuple[list[str], dict[str, str]],
+    source_path: pathlib.Path,
+    paths: list[str],
+) -> set[str]:
+    """Batch NUL-delimited paths, preserving spaces, Unicode and newlines."""
+    if not paths:
+        return set()
+    command, environment = matcher
+    result = subprocess.run(
+        command, cwd=source_path, env=environment,
+        input=b"".join(os.fsencode(path) + b"\0" for path in paths),
+        capture_output=True,
+    )
+    # Git may only warn about an unreadable ignore file; never silently include
+    # data that its rules could have excluded.
+    if result.returncode not in (0, 1) or result.stderr:
+        raise ValueError(
+            ".gitignore matching failed: "
+            + result.stderr.decode("utf-8", "replace").strip()
+        )
+    return {os.fsdecode(path) for path in result.stdout.split(b"\0") if path}
 
 
 def is_excluded(rel_path: str, patterns: tuple[str, ...]) -> bool:
@@ -84,16 +132,6 @@ def is_excluded(rel_path: str, patterns: tuple[str, ...]) -> bool:
     return False
 
 
-def read_tarignore(path: pathlib.Path, base_dir: str) -> list[tuple[str, str]]:
-    rules = []
-    with path.open("r", encoding="utf-8", errors="replace") as tarignore_file:
-        for line in tarignore_file:
-            pattern = line.strip()
-            if pattern and not pattern.startswith("#"):
-                rules.append((base_dir, pattern))
-    return rules
-
-
 def collect_source_paths(
     source_path: pathlib.Path,
     use_ignore: bool = True,
@@ -103,38 +141,53 @@ def collect_source_paths(
         return [source_path]
 
     collected = [source_path]
-    ignore_rules: list[tuple[str, str]] = []
+    with contextlib.ExitStack() as stack:
+        matcher = (
+            stack.enter_context(gitignore_context(source_path)) if use_ignore else None
+        )
+        for root, dirs, files in os.walk(source_path):
+            current_dir = pathlib.Path(root)
+            rel_dir = current_dir.relative_to(source_path).as_posix()
+            if rel_dir == ".":
+                rel_dir = ""
 
-    for root, dirs, files in os.walk(source_path):
-        current_dir = pathlib.Path(root)
-        rel_dir = current_dir.relative_to(source_path).as_posix()
-        if rel_dir == ".":
-            rel_dir = ""
+            if use_ignore:
+                ignore_file = current_dir / ".gitignore"
+                # Never follow a symbolic .gitignore. Reading regular files
+                # explicitly also makes permission failures fatal.
+                if ignore_file.is_symlink():
+                    raise ValueError(f"symbolic .gitignore is not supported: {ignore_file}")
+                if ignore_file.is_file():
+                    with ignore_file.open("rb") as stream:
+                        stream.read(1)
 
-        if use_ignore:
-            tarignore_file = current_dir / ".tarignore"
-            if tarignore_file.is_file():
-                ignore_rules.extend(read_tarignore(tarignore_file, rel_dir))
+            candidates = []
+            directory_names = set(dirs)
+            for name in dirs + files:
+                relative = f"{rel_dir}/{name}" if rel_dir else name
+                if is_excluded(relative, exclude_patterns):
+                    continue
+                # A trailing slash identifies actual directories to Git;
+                # directory symlinks remain files for directory-only patterns.
+                git_path = relative
+                if name in directory_names and not (current_dir / name).is_symlink():
+                    git_path += "/"
+                candidates.append((name, git_path))
+            ignored = (
+                gitignored_paths(matcher, source_path, [path for _, path in candidates])
+                if matcher is not None else set()
+            )
 
-        # Filter directories in-place to avoid descending into ignored dirs
-        surviving_dirs = []
-        for directory in dirs:
-            dir_rel = f"{rel_dir}/{directory}" if rel_dir else directory
-            if is_excluded(dir_rel, exclude_patterns):
-                continue
-            if use_ignore and is_tarignored(dir_rel, ignore_rules):
-                continue
-            surviving_dirs.append(directory)
-            collected.append(current_dir / directory)
-        dirs[:] = surviving_dirs
-
-        for filename in files:
-            file_rel = f"{rel_dir}/{filename}" if rel_dir else filename
-            if is_excluded(file_rel, exclude_patterns):
-                continue
-            if use_ignore and is_tarignored(file_rel, ignore_rules):
-                continue
-            collected.append(current_dir / filename)
+            # Prune before descending, including Git's rule that negation cannot
+            # re-include a child of an excluded parent directory.
+            surviving_dirs = []
+            for name, git_path in candidates:
+                if git_path in ignored:
+                    continue
+                if name in directory_names:
+                    surviving_dirs.append(name)
+                collected.append(current_dir / name)
+            dirs[:] = surviving_dirs
 
     return collected
 

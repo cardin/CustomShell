@@ -139,8 +139,8 @@ function Protect-Tar {
     root. Repeatable.
 
     .PARAMETER NoIgnore
-    Disable the default recursive .tarignore handling, so all files
-    including those matched by .tarignore files are archived.
+    Disable recursive .gitignore handling. Otherwise matching paths are omitted
+    even if tracked by Git. Explicit -Exclude rules still apply.
 
     .PARAMETER Help
     Displays command usage and archive details without creating an archive.
@@ -206,14 +206,15 @@ PARAMETERS
         source root. Repeatable.
 
     --no-ignore / -NoIgnore
-        Disable the default recursive .tarignore handling, so all files
-        including those matched by .tarignore files are archived.
+        Disable recursive .gitignore handling. Otherwise matching paths are
+        omitted even if tracked by Git. Explicit --exclude rules still apply.
 
     --help
         Displays this help.
 
 NOTES
-    Requires Python 3.8 or newer, tar.exe, and age.exe. Encryption uses age with
+    Requires Python 3.8 or newer, tar.exe, and age.exe; directory .gitignore
+    handling also requires Git. Encryption uses age with
     scrypt key derivation and ChaCha20-Poly1305 authenticated encryption.
 '@
         return
@@ -311,7 +312,7 @@ Install age or ensure age.exe is available in PATH.
         Write-Progress -Activity 'Protect-Tar' -Status '[2/4] Packaging files...' -PercentComplete 25
         Write-Verbose "Creating temporary archive: $temporaryTar"
 
-        # The shared Python core applies .tarignore and -Exclude and returns the
+        # The shared Python core applies .gitignore and -Exclude and returns the
         # authoritative entry list, so Windows archives exactly what Linux does.
         $listPath = Join-Path ([IO.Path]::GetTempPath()) "$([guid]::NewGuid()).list"
         $listArguments = @('list-source', $sourceItem.FullName, '--output', $listPath)
@@ -326,7 +327,7 @@ Install age or ensure age.exe is available in PATH.
         }
 
         $listOutput = Invoke-CustomShellArchiveCore `
-            -FailureMessage 'Source contains names that are not portable to Windows.' `
+            -FailureMessage 'Source validation or .gitignore handling failed.' `
             -Arguments $listArguments
         $totalItems = [int](@($listOutput)[-1])
         Write-Verbose "Archiving '$($sourceItem.Name)' from '$sourceParentPath'."

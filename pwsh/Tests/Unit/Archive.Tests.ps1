@@ -82,10 +82,12 @@ elseif ($mode -eq 'decrypt') {
 '@ | Set-Content -LiteralPath $psScript -Encoding Ascii
 
     $mockPath = Join-Path $Directory 'age.cmd'
+    # Reuse the running host, including pwsh_guest.exe on policy-restricted PCs.
+    $env:CUSTOMSHELL_TEST_PWSH = (Get-Process -Id $PID).Path
     @'
 @echo off
 if "%MOCK_AGE_FAIL%"=="1" exit /b 9
-pwsh.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0mock_age.ps1" %*
+"%CUSTOMSHELL_TEST_PWSH%" -NoProfile -ExecutionPolicy Bypass -File "%~dp0mock_age.ps1" %*
 exit /b %ERRORLEVEL%
 '@ | Set-Content -LiteralPath $mockPath -Encoding Ascii
 }
@@ -250,6 +252,7 @@ function New-TestTarGzip {
         $script:archive = $null
         $script:originalPath = $env:PATH
         $script:originalPathExt = $env:PATHEXT
+        $script:originalTestPwsh = $env:CUSTOMSHELL_TEST_PWSH
 
         New-Item -ItemType Directory -Path $source, $mockBin | Out-Null
         Set-Content -LiteralPath (Join-Path $source 'data.txt') -Value 'round trip payload'
@@ -265,6 +268,7 @@ function New-TestTarGzip {
     AfterEach {
         $env:PATH = $originalPath
         $env:PATHEXT = $originalPathExt
+        $env:CUSTOMSHELL_TEST_PWSH = $originalTestPwsh
         Remove-Item Env:MOCK_AGE_FAIL -ErrorAction SilentlyContinue
         Remove-Variable `
             -Name CustomShellMoveCall, CustomShellPublishFailed, CustomShellFailFinalMove, CustomShellCollisionResponse, CustomShellBackupMoveCount `
@@ -327,30 +331,39 @@ function New-TestTarGzip {
         Test-Path -LiteralPath (Join-Path $destination 'source\drop.log') | Should -Be $false
     }
 
-    It 'recursively honors .tarignore files in the source tree' {
+    It 'recursively honors .gitignore files even for tracked files' {
         New-Item -ItemType Directory -Path (Join-Path $source 'nested') -Force | Out-Null
-        Set-Content -LiteralPath (Join-Path $source '.tarignore') -Value "*.tmp`nignored_dir`n# comment"
-        Set-Content -LiteralPath (Join-Path $source 'nested\.tarignore') -Value 'sub_ignored.txt'
+        Set-Content -LiteralPath (Join-Path $source '.gitignore') -Value "*.tmp`n!keep.tmp`nignored_dir/`n.git/`n# comment"
+        Set-Content -LiteralPath (Join-Path $source 'nested\.gitignore') -Value 'sub_ignored.txt'
+        Set-Content -LiteralPath (Join-Path $source '.tarignore') -Value 'keep.txt'
         Set-Content -LiteralPath (Join-Path $source 'keep.txt') -Value 'keep me'
         Set-Content -LiteralPath (Join-Path $source 'test.tmp') -Value 'ignore me'
+        Set-Content -LiteralPath (Join-Path $source 'keep.tmp') -Value 're-include me'
         Set-Content -LiteralPath (Join-Path $source 'nested\sub_keep.txt') -Value 'nested keep'
         Set-Content -LiteralPath (Join-Path $source 'nested\sub_ignored.txt') -Value 'nested ignore'
         New-Item -ItemType Directory -Path (Join-Path $source 'ignored_dir') -Force | Out-Null
         Set-Content -LiteralPath (Join-Path $source 'ignored_dir\data.txt') -Value 'deep ignore'
-        $destination = Join-Path $testRoot 'tarignore-restored'
+        & git -C $source init --quiet --template=
+        $LASTEXITCODE | Should -Be 0
+        & git -C $source add --force test.tmp
+        $LASTEXITCODE | Should -Be 0
+        $indexHash = (Get-FileHash -LiteralPath (Join-Path $source '.git/index')).Hash
+        $destination = Join-Path $testRoot 'gitignore-restored'
 
         $archive = (Protect-Tar $source $archiveBase).FullName
         Unprotect-Tar -Archive $archive -Destination $destination | Out-Null
 
         Test-Path -LiteralPath (Join-Path $destination 'source\keep.txt') | Should -Be $true
+        Test-Path -LiteralPath (Join-Path $destination 'source\keep.tmp') | Should -Be $true
         Test-Path -LiteralPath (Join-Path $destination 'source\test.tmp') | Should -Be $false
         Test-Path -LiteralPath (Join-Path $destination 'source\nested\sub_keep.txt') | Should -Be $true
         Test-Path -LiteralPath (Join-Path $destination 'source\nested\sub_ignored.txt') | Should -Be $false
         Test-Path -LiteralPath (Join-Path $destination 'source\ignored_dir') | Should -Be $false
+        (Get-FileHash -LiteralPath (Join-Path $source '.git/index')).Hash | Should -Be $indexHash
     }
 
     It 'does not publish an archive when the shared core rejects the source' {
-        Set-Content -LiteralPath (Join-Path $source '.tarignore') -Value '*.tmp'
+        Set-Content -LiteralPath (Join-Path $source '.gitignore') -Value '*.tmp'
         Mock Invoke-CustomShellArchiveCore {
             throw 'simulated core validation failure'
         } -ModuleName CustomShell.Commands
@@ -361,10 +374,10 @@ function New-TestTarGzip {
             Should -Be 0
     }
 
-    It 'includes .tarignore-matched files when --no-ignore is passed' {
+    It 'includes .gitignore-matched files when --no-ignore is passed' {
         New-Item -ItemType Directory -Path (Join-Path $source 'nested') -Force | Out-Null
-        Set-Content -LiteralPath (Join-Path $source '.tarignore') -Value "*.tmp`nignored_dir`n# comment"
-        Set-Content -LiteralPath (Join-Path $source 'nested\.tarignore') -Value 'sub_ignored.txt'
+        Set-Content -LiteralPath (Join-Path $source '.gitignore') -Value "*.tmp`nignored_dir/`n# comment"
+        Set-Content -LiteralPath (Join-Path $source 'nested\.gitignore') -Value 'sub_ignored.txt'
         Set-Content -LiteralPath (Join-Path $source 'keep.txt') -Value 'keep me'
         Set-Content -LiteralPath (Join-Path $source 'test.tmp') -Value 'ignore me'
         Set-Content -LiteralPath (Join-Path $source 'nested\sub_keep.txt') -Value 'nested keep'

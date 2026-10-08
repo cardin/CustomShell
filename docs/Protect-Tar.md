@@ -19,14 +19,26 @@ Unprotect-Tar --help
   input and combines repeated patterns. A pattern without `/` matches basenames
   at any depth; a pattern containing `/` is anchored to the source root. Missing
   or empty patterns fail before any filesystem change.
-- Directory archiving recursively applies exclusion rules from `.tarignore`
-  files by default. A pattern without `/` matches basenames at any depth below
-  the `.tarignore` file; a pattern containing `/` is anchored to the directory
-  that holds the file and also covers the matching subtree. Empty lines and
-  lines beginning with `#` are ignored. An unreadable `.tarignore` fails
-  validation instead of silently archiving paths that the file may have
-  excluded. `--no-ignore` disables this default handling so ignored files are
-  archived.
+- Directory archiving recursively applies `.gitignore` files within the source
+  tree by default, using Git's matching semantics: directory-only patterns,
+  anchored paths, `**`, comments, escaping, and ordered `!` negation. Nested
+  files can override ancestor rules, but an excluded directory is not traversed
+  and its children cannot be re-included unless the directory is re-included.
+- Paths excluded by these rules are omitted **regardless of Git tracking
+  status**. Matching is case-sensitive on both platforms. The source need not
+  be a Git repository. Only `.gitignore` files at or below the source root
+  apply; parent rules, global excludes, `.git/info/exclude`, and source Git
+  configuration do not apply. The source repository and index are not modified.
+- Unreadable regular `.gitignore` files or Git matching failures fail validation
+  rather than silently including potentially excluded data. Symbolic
+  `.gitignore` files are rejected and never followed. `--no-ignore` bypasses
+  `.gitignore` handling and its Git dependency; explicit `--exclude` patterns
+  still apply.
+- Review the resulting archive contents: secrets and runtime data excluded by
+  `.gitignore` are also excluded from the encrypted archive.
+  `.git` directories are not automatically excluded; use `.gitignore` or
+  `--exclude .git` if they should be omitted. Single-file sources are unchanged
+  and do not apply ignore rules.
 
 ## Input and output
 
@@ -65,6 +77,11 @@ in environment variables, or passed in process arguments.
 Both platforms use the shared Python archive core in `tools/archive_core.py` for
 path, portability, and archive-member validation and for generating the
 `Protect-Tar` entry list.
+
+Directory creation with ignore handling enabled also requires Git in `PATH`.
+The core uses temporary, isolated Git metadata and `git check-ignore --no-index`
+to evaluate `.gitignore` rules, then removes that metadata on success or failure.
+Git is not required for single-file sources, `--no-ignore`, or extraction.
 
 Linux
 
