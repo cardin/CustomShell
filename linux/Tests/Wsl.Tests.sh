@@ -16,7 +16,13 @@ fail() {
 }
 
 mkdir -p "$test_root/bin" "$test_root/home/.ssh" "$test_root/windows/.ssh"
-printf '#!/usr/bin/env bash\nexit 0\n' >"$test_root/bin/cmd.exe"
+cat >"$test_root/bin/cmd.exe" <<'EOF'
+#!/usr/bin/env bash
+if [[ ${1:-} == /C && ${2:-} == start ]]; then
+    printf 'FAKE-CMD %s\n' "${*:4}"
+fi
+exit 0
+EOF
 printf '#!/usr/bin/env bash\nexit 0\n' >"$test_root/bin/code"
 cat >"$test_root/bin/rsync" <<'EOF'
 #!/usr/bin/env bash
@@ -53,42 +59,27 @@ RSYNC_FAIL=true mirror-win-ssh >/dev/null 2>&1 &&
 USERPROFILE="" mirror-win-ssh >/dev/null 2>&1 &&
     fail "mirror-win-ssh accepted an empty USERPROFILE"
 
-# BROWSER setup: work devices get a wrapper to the Windows browser, other
-# setups and preexisting values are left alone.
+# BROWSER setup: every WSL session gets a wrapper that hands links to the
+# default Windows browser through cmd.exe; preexisting values are left alone.
+# The sources above already exported a value against the disposable browser
+# home, so clear it before exercising the wrapper explicitly below.
 browser_root="$test_root/browser"
-win_root="$browser_root/winroot"
-mkdir -p "$win_root/Users/testuser" "$browser_root/home"
+unset BROWSER
+mkdir -p "$browser_root/home"
 
-# run_wsl_sh sources platform/wsl.sh as a work device in a disposable HOME.
+# run_wsl_sh sources platform/wsl.sh in a disposable HOME with the mock
+# Windows commands on PATH.
 run_wsl_sh() {
-    Blue="" HOME="$browser_root/home" USERPROFILE="$win_root/Users/testuser" \
-        IS_WORK_DEVICE=true PATH="$test_root/bin:$PATH" \
+    Blue="" HOME="$browser_root/home" PATH="$test_root/bin:$PATH" \
         bash -u -c "$1" bash "$(dirname "${BASH_SOURCE[0]}")/../platform/wsl.sh"
 }
-
-Blue="" HOME="$browser_root/home" USERPROFILE="$win_root/Users/testuser" \
-    PATH="$test_root/bin:$PATH" bash -u -c '
-    source "$1"
-    [[ -z "${BROWSER:-}" ]]
-' bash "$(dirname "${BASH_SOURCE[0]}")/../platform/wsl.sh" ||
-    fail "BROWSER was set on a non-work device"
-
-run_wsl_sh '
-    source "$1"
-    [[ -z "${BROWSER:-}" ]]
-' || fail "BROWSER was set without a Windows browser"
-
-edge_dir="$win_root/Program Files (x86)/Microsoft/Edge/Application"
-mkdir -p "$edge_dir"
-printf '#!/usr/bin/env bash\necho "FAKE-EDGE $*"\n' >"$edge_dir/msedge.exe"
-chmod +x "$edge_dir/msedge.exe"
 
 run_wsl_sh '
     source "$1"
     [[ "${BROWSER:-}" == "$HOME/.cache/customshell/windows-browser" ]] || exit 2
     wrapper="$BROWSER"
     "$wrapper" https://example.com >"$HOME/wrapper.out" || exit 3
-    grep -q "^FAKE-EDGE https://example.com$" "$HOME/wrapper.out" || exit 4
+    grep -q "^FAKE-CMD https://example.com$" "$HOME/wrapper.out" || exit 4
     first_inode="$(stat -c %i "$wrapper")"
     source "$1"
     [[ "$(stat -c %i "$wrapper")" == "$first_inode" ]] || exit 5
@@ -100,12 +91,19 @@ run_wsl_sh '
     echo stale >"$BROWSER"
     unset BROWSER
     source "$1"
-    grep -q "Program Files (x86)" "$BROWSER" || exit 2
-    "$BROWSER" https://example.com | grep -q "^FAKE-EDGE " || exit 3
+    grep -q "cmd.exe /C start" "$BROWSER" || exit 2
+    "$BROWSER" https://example.com | grep -q "^FAKE-CMD " || exit 3
 ' || fail "stale BROWSER wrapper was not regenerated"
 
-Blue="" HOME="$browser_root/home" USERPROFILE="$win_root/Users/testuser" \
-    IS_WORK_DEVICE=true BROWSER=vim PATH="$test_root/bin:$PATH" bash -u -c '
+# Without Windows interop there is no cmd.exe, so BROWSER is left unset.
+Blue="" HOME="$browser_root/home" PATH="/usr/bin:/bin" bash -u -c '
+    source "$1"
+    [[ -z "${BROWSER:-}" ]]
+' bash "$(dirname "${BASH_SOURCE[0]}")/../platform/wsl.sh" ||
+    fail "BROWSER was set without Windows command access"
+
+Blue="" HOME="$browser_root/home" PATH="$test_root/bin:$PATH" BROWSER=vim \
+    bash -u -c '
     source "$1"
     [[ "$BROWSER" == vim ]]
 ' bash "$(dirname "${BASH_SOURCE[0]}")/../platform/wsl.sh" ||

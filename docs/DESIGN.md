@@ -43,10 +43,10 @@ member validation and for generating the `Protect-Tar` entry list.
 - Linux startup may manage a reusable `ssh-agent` and regenerate CustomShell's
   `environment.d` file. Linux setup owns its Git credential-helper setting;
   PowerShell startup does not change global Git configuration.
-- On WSL work devices, startup defaults `BROWSER` to a generated wrapper under
-  `~/.cache/customshell/` that execs the installed Windows browser, so tools
-  like `npm login` open links on the Windows side. An existing `BROWSER` value
-  is never overwritten.
+- On WSL, startup defaults `BROWSER` to a generated wrapper under
+  `~/.cache/customshell/` that hands links to the default Windows browser
+  through `cmd.exe`, so tools like `npm login` open links on the Windows side.
+  An existing `BROWSER` value is never overwritten.
 
 ## Setup and upgrades
 

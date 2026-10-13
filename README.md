@@ -54,9 +54,9 @@ configuration but not the persistent environment values:
 . ~/.config/CustomShell/linux/main.sh
 ```
 
-On WSL work devices, startup also defaults `BROWSER` to a wrapper that opens
-links (for example `npm login`) in the installed Windows browser; an existing
-`BROWSER` value is kept.
+On WSL, startup also defaults `BROWSER` to a wrapper that opens links (for
+example `npm login`) in the default Windows browser; an existing `BROWSER`
+value is kept.
 
 ## Commands
 
