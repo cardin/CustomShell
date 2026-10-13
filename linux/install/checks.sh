@@ -78,6 +78,10 @@ report_checks() {
 		check_failures=$((check_failures + 1))
 	fi
 
+	if ! customshell_shims_check; then
+		check_failures=$((check_failures + 1))
+	fi
+
 	customshell_environment_report
 
 	if [[ -n ${CUSTOM_CA_CERT:-} ]]; then

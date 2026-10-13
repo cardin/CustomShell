@@ -10,7 +10,9 @@ if command -v bat >/dev/null 2>&1; then
 	export MANPAGER="sh -c 'col -bx | bat -l man -p'"
 	export BAT_CONFIG_PATH="$PROJ_DIR/config/bat.conf"
 fi
-if command -v fdfind >/dev/null 2>&1; then
+# Prefer the PATH shim install.sh creates so scripts and non-interactive
+# shells see fd; fall back to an alias when the shim is not on this PATH.
+if command -v fdfind >/dev/null 2>&1 && ! command -v fd >/dev/null 2>&1; then
 	alias fd="fdfind"
 fi
 

@@ -61,7 +61,7 @@ espanso_match="$espanso_root/match"
 espanso_config="$espanso_root/config"
 
 run_install() {
-	HOME="$test_root/home" GIT_CONFIG_GLOBAL="$test_root/home/.gitconfig" \
+	HOME="$test_root/home" XDG_BIN_HOME='' GIT_CONFIG_GLOBAL="$test_root/home/.gitconfig" \
 		bash "$install_script" \
 		--bashrc "$test_root/home/.bashrc" \
 		--espanso-root "$espanso_root" "$@"
@@ -115,6 +115,15 @@ grep -Fq "/old/location/linux/main.sh" "$test_root/home/.bashrc" && fail "stale 
 [[ "$(readlink -f "$espanso_config/whitelist.yml")" == "$repo_dir/config/espanso/whitelist.yml" ]] ||
 	fail "whitelist espanso link target is wrong"
 
+# The fd shim exposes fdfind under its expected name so scripts and
+# non-interactive shells see it, not only interactive aliases.
+fd_shim="$test_root/home/.local/bin/fd"
+if command -v fdfind >/dev/null 2>&1; then
+	[[ -L "$fd_shim" ]] || fail "fd shim missing"
+	[[ "$(readlink -f "$fd_shim")" == "$(readlink -f "$(command -v fdfind)")" ]] ||
+		fail "fd shim target is wrong"
+fi
+
 # Check mode succeeds when configured and changes nothing.
 check_md5="$(md5_of "$test_root/home/.bashrc")"
 run_install --check >/dev/null 2>&1 || fail "check failed on a configured setup"
@@ -146,6 +155,9 @@ run_install --uninstall >/dev/null 2>&1 || fail "uninstall failed"
 	fail "uninstall did not restore the original profile"
 [[ ! -e "$espanso_match/_base.yml" && ! -e "$espanso_config/whitelist.yml" ]] ||
 	fail "uninstall left managed links behind"
+if command -v fdfind >/dev/null 2>&1; then
+	[[ ! -e "$fd_shim" && ! -L "$fd_shim" ]] || fail "uninstall left the fd shim behind"
+fi
 [[ "$(GIT_CONFIG_GLOBAL="$test_root/home/.gitconfig" git config --global --get-all credential.helper)" == $'store\nmanager-core' ]] || fail "uninstall did not restore the previous Git credential helpers"
 [[ ! -e "$test_root/home/.local/state/customshell/git-credential-helper" ]] ||
 	fail "uninstall left Git credential helper state behind"

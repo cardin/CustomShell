@@ -34,6 +34,7 @@ source "$install_dir/profile.sh"
 source "$install_dir/environment.sh"
 source "$install_dir/espanso.sh"
 source "$install_dir/git.sh"
+source "$install_dir/shims.sh"
 source "$install_dir/checks.sh"
 
 usage() {
@@ -107,11 +108,13 @@ done < <(customshell_persistent_env_lines)
 desired_block_lines+=(". $(shell_single_quote "$entry_script")")
 
 espanso_initialize
+customshell_shims_initialize
 
 case "$mode" in
 install)
 	write_profile_block || exit 1
 	link_espanso || exit 1
+	customshell_shims_link || exit 1
 	customshell_git_install || exit 1
 	report_commands
 	if [[ "$dry_run" == true ]]; then
@@ -124,6 +127,7 @@ uninstall)
 	customshell_git_uninstall || exit 1
 	remove_profile_block || exit 1
 	unlink_espanso || exit 1
+	customshell_shims_unlink || exit 1
 	if [[ "$dry_run" == true ]]; then
 		say "Dry run complete; no changes made."
 	else
