@@ -55,7 +55,8 @@ def gitignore_context(
     exclusions or change matching behavior between platforms.
     """
     environment = {
-        key: value for key, value in os.environ.items()
+        key: value
+        for key, value in os.environ.items()
         if not key.upper().startswith("GIT_")
     }
     environment.update(GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull)
@@ -63,11 +64,15 @@ def gitignore_context(
         git_dir = pathlib.Path(temporary).resolve()
         source = source_path.resolve()
         if is_within(git_dir, source):
-            raise ValueError("temporary Git metadata cannot be inside the source directory")
+            raise ValueError(
+                "temporary Git metadata cannot be inside the source directory"
+            )
         try:
             initialized = subprocess.run(
                 ["git", "init", "--bare", "--quiet", "--template=", str(git_dir)],
-                cwd=git_dir, env=environment, capture_output=True,
+                cwd=git_dir,
+                env=environment,
+                capture_output=True,
             )
         except FileNotFoundError as error:
             raise ValueError(
@@ -79,10 +84,19 @@ def gitignore_context(
                 + initialized.stderr.decode("utf-8", "replace").strip()
             )
         command = [
-            "git", f"--git-dir={git_dir}", f"--work-tree={source}",
-            "-c", "core.bare=false", "-c", "core.ignoreCase=false",
-            "-c", f"core.excludesFile={os.devnull}",
-            "check-ignore", "--no-index", "-z", "--stdin",
+            "git",
+            f"--git-dir={git_dir}",
+            f"--work-tree={source}",
+            "-c",
+            "core.bare=false",
+            "-c",
+            "core.ignoreCase=false",
+            "-c",
+            f"core.excludesFile={os.devnull}",
+            "check-ignore",
+            "--no-index",
+            "-z",
+            "--stdin",
         ]
         yield command, environment
 
@@ -97,7 +111,9 @@ def gitignored_paths(
         return set()
     command, environment = matcher
     result = subprocess.run(
-        command, cwd=source_path, env=environment,
+        command,
+        cwd=source_path,
+        env=environment,
         input=b"".join(os.fsencode(path) + b"\0" for path in paths),
         capture_output=True,
     )
@@ -156,7 +172,9 @@ def collect_source_paths(
                 # Never follow a symbolic .gitignore. Reading regular files
                 # explicitly also makes permission failures fatal.
                 if ignore_file.is_symlink():
-                    raise ValueError(f"symbolic .gitignore is not supported: {ignore_file}")
+                    raise ValueError(
+                        f"symbolic .gitignore is not supported: {ignore_file}"
+                    )
                 if ignore_file.is_file():
                     with ignore_file.open("rb") as stream:
                         stream.read(1)
@@ -167,15 +185,14 @@ def collect_source_paths(
                 relative = f"{rel_dir}/{name}" if rel_dir else name
                 if is_excluded(relative, exclude_patterns):
                     continue
-                # A trailing slash identifies actual directories to Git;
-                # directory symlinks remain files for directory-only patterns.
-                git_path = relative
-                if name in directory_names and not (current_dir / name).is_symlink():
-                    git_path += "/"
-                candidates.append((name, git_path))
+                # Git checks the actual file type, including directory symlinks.
+                # Appending '/' is unnecessary and can make blank CRLF ignore
+                # lines match every directory (observed with Git 2.53.0).
+                candidates.append((name, relative))
             ignored = (
                 gitignored_paths(matcher, source_path, [path for _, path in candidates])
-                if matcher is not None else set()
+                if matcher is not None
+                else set()
             )
 
             # Prune before descending, including Git's rule that negation cannot

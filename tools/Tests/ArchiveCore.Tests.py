@@ -46,22 +46,43 @@ class ArchiveCoreTests(unittest.TestCase):
         environment.update(GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull)
         subprocess.run(
             ["git", "-C", str(self.source), *arguments],
-            env=environment, check=True, capture_output=True,
+            env=environment,
+            check=True,
+            capture_output=True,
         )
 
     def test_gitignore_paths_basename_and_nested_precedence(self) -> None:
         self.write(".gitignore", "logs/*.log\n*.tmp\n/root.txt\n*.bin\n")
         self.write("sub/.gitignore", "!keep.bin\nnested/deep.txt\n")
         for name in (
-            "logs/one.log", "sub/logs/one.log", "root.txt", "sub/root.txt",
-            "a.tmp", "sub/deep/a.tmp", "sub/keep.bin", "sub/drop.bin",
-            "sub/nested/deep.txt", "nested/deep.txt",
+            "logs/one.log",
+            "sub/logs/one.log",
+            "root.txt",
+            "sub/root.txt",
+            "a.tmp",
+            "sub/deep/a.tmp",
+            "sub/keep.bin",
+            "sub/drop.bin",
+            "sub/nested/deep.txt",
+            "nested/deep.txt",
         ):
             self.write(name)
         included = self.collected()
-        for name in ("sub/logs/one.log", "sub/root.txt", "sub/keep.bin", "nested/deep.txt"):
+        for name in (
+            "sub/logs/one.log",
+            "sub/root.txt",
+            "sub/keep.bin",
+            "nested/deep.txt",
+        ):
             self.assertIn(name, included)
-        for name in ("logs/one.log", "root.txt", "a.tmp", "sub/deep/a.tmp", "sub/drop.bin", "sub/nested/deep.txt"):
+        for name in (
+            "logs/one.log",
+            "root.txt",
+            "a.tmp",
+            "sub/deep/a.tmp",
+            "sub/drop.bin",
+            "sub/nested/deep.txt",
+        ):
             self.assertNotIn(name, included)
 
     def test_directory_only_patterns_and_pruning(self) -> None:
@@ -76,16 +97,63 @@ class ArchiveCoreTests(unittest.TestCase):
         self.assertNotIn("blocked", included)
         self.assertNotIn("blocked/keep.txt", included)
 
+    def test_blank_gitignore_lines_preserve_directories(self) -> None:
+        for name in (
+            "keep/deep/file.txt",
+            "cache/drop.txt",
+            "sub/cache",
+            "sub/drop.tmp",
+            "sub/keep.tmp",
+        ):
+            self.write(name)
+        for newline in (b"\n", b"\r\n"):
+            with self.subTest(newline=newline):
+                root_rules = newline.join(
+                    (b"# comment", b"", b"cache/", b"*.tmp", b"", b"")
+                )
+                nested_rules = newline.join((b"", b"!keep.tmp", b"", b""))
+                self.write(".gitignore").write_bytes(root_rules)
+                self.write("sub/.gitignore").write_bytes(nested_rules)
+                included = self.collected()
+                for name in ("keep", "keep/deep/file.txt", "sub/cache", "sub/keep.tmp"):
+                    self.assertIn(name, included)
+                for name in ("cache", "cache/drop.txt", "sub/drop.tmp"):
+                    self.assertNotIn(name, included)
+                self.assertEqual((self.source / ".gitignore").read_bytes(), root_rules)
+                self.assertEqual(
+                    (self.source / "sub/.gitignore").read_bytes(), nested_rules
+                )
+
+    @unittest.skipIf(os.name == "nt", "symbolic links require Windows privileges")
+    def test_directory_only_pattern_does_not_exclude_directory_symlink(self) -> None:
+        self.write(".gitignore", "cache/\n")
+        self.write("target/file.txt")
+        (self.source / "cache").symlink_to("target", target_is_directory=True)
+        self.assertIn("cache", self.collected())
+
     def test_double_star_negation_escaping_and_case(self) -> None:
         self.write(
             ".gitignore",
             "# comment\n.env.*\n!.env.example\nlogs/**/drop[0-9].txt\n"
             "**/artifact?.bin\n\\#literal\n\\!literal\nspace\\ \ntrailing   \nCase.txt\n",
         )
-        kept = (".env.example", "logs/deep/keep.txt", "case.txt", "space", "trailing space")
+        kept = (
+            ".env.example",
+            "logs/deep/keep.txt",
+            "case.txt",
+            "space",
+            "trailing space",
+        )
         dropped = (
-            ".env.local", "logs/drop1.txt", "logs/a/b/drop2.txt", "artifact1.bin",
-            "sub/artifact2.bin", "#literal", "!literal", "trailing", "Case.txt",
+            ".env.local",
+            "logs/drop1.txt",
+            "logs/a/b/drop2.txt",
+            "artifact1.bin",
+            "sub/artifact2.bin",
+            "#literal",
+            "!literal",
+            "trailing",
+            "Case.txt",
         )
         if os.name != "nt":
             dropped += ("space ",)
@@ -132,12 +200,20 @@ class ArchiveCoreTests(unittest.TestCase):
         self.git("config", "core.excludesFile", str(global_ignore))
         (self.root / ".gitignore").write_text("parent.txt\n", encoding="utf-8")
         config = self.root / "gitconfig"
-        config.write_text(f'[core]\nexcludesFile = {global_ignore.as_posix()}\nignoreCase = true\n', encoding="utf-8")
-        with mock.patch.dict(os.environ, {
-            "GIT_CONFIG_GLOBAL": str(config), "GIT_DIR": str(self.root / "missing"),
-            "GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "core.excludesFile",
-            "GIT_CONFIG_VALUE_0": str(global_ignore),
-        }):
+        config.write_text(
+            f"[core]\nexcludesFile = {global_ignore.as_posix()}\nignoreCase = true\n",
+            encoding="utf-8",
+        )
+        with mock.patch.dict(
+            os.environ,
+            {
+                "GIT_CONFIG_GLOBAL": str(config),
+                "GIT_DIR": str(self.root / "missing"),
+                "GIT_CONFIG_COUNT": "1",
+                "GIT_CONFIG_KEY_0": "core.excludesFile",
+                "GIT_CONFIG_VALUE_0": str(global_ignore),
+            },
+        ):
             included = self.collected()
         for name in ("keep.txt", "global.txt", "info.txt", "parent.txt", "case.txt"):
             self.assertIn(name, included)
@@ -146,9 +222,14 @@ class ArchiveCoreTests(unittest.TestCase):
         self.write(".gitignore", "*.tmp\n")
         self.write("data.tmp")
         self.write("drop.log")
-        with mock.patch.object(archive_core.subprocess, "run", side_effect=AssertionError("Git invoked")):
+        with mock.patch.object(
+            archive_core.subprocess, "run", side_effect=AssertionError("Git invoked")
+        ):
             included = self.collected(use_ignore=False, exclude_patterns=("*.log",))
-            self.assertEqual(archive_core.collect_source_paths(self.source / "data.tmp"), [self.source / "data.tmp"])
+            self.assertEqual(
+                archive_core.collect_source_paths(self.source / "data.tmp"),
+                [self.source / "data.tmp"],
+            )
         self.assertIn("data.tmp", included)
         self.assertNotIn("drop.log", included)
 
@@ -177,22 +258,33 @@ class ArchiveCoreTests(unittest.TestCase):
                     if mode == "missing":
                         raise FileNotFoundError("git missing")
                     if mode == "init":
-                        return subprocess.CompletedProcess(command, 128, b"", b"init failure")
+                        return subprocess.CompletedProcess(
+                            command, 128, b"", b"init failure"
+                        )
                     return original_run(command, **options)
                 status = 1 if mode == "warning" else 128
-                return subprocess.CompletedProcess(command, status, b"", b"matching failure")
+                return subprocess.CompletedProcess(
+                    command, status, b"", b"matching failure"
+                )
 
             output = self.root / "entries.list"
-            with self.subTest(mode=mode), mock.patch.object(archive_core.subprocess, "run", side_effect=run):
-                with self.assertRaises(ValueError):
-                    archive_core.list_source(self.source, output=output)
+            with self.subTest(mode=mode):
+                with mock.patch.object(archive_core.subprocess, "run", side_effect=run):
+                    with self.assertRaises(ValueError):
+                        archive_core.list_source(self.source, output=output)
             self.assertFalse(output.exists())
             self.assertTrue(created)
             self.assertTrue(all(not path.exists() for path in created))
 
     def test_success_removes_temporary_metadata(self) -> None:
         with archive_core.gitignore_context(self.source) as (command, _):
-            metadata = pathlib.Path(next(arg.split("=", 1)[1] for arg in command if arg.startswith("--git-dir=")))
+            metadata = pathlib.Path(
+                next(
+                    arg.split("=", 1)[1]
+                    for arg in command
+                    if arg.startswith("--git-dir=")
+                )
+            )
             self.assertTrue(metadata.is_dir())
         self.assertFalse(metadata.exists())
 

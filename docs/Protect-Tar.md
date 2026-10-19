@@ -29,6 +29,10 @@ Unprotect-Tar --help
   be a Git repository. Only `.gitignore` files at or below the source root
   apply; parent rules, global excludes, `.git/info/exclude`, and source Git
   configuration do not apply. The source repository and index are not modified.
+- Both LF and CRLF `.gitignore` files are supported, including blank lines.
+  The shared matcher passes paths without trailing slashes and lets Git detect
+  directory types, avoiding a Git 2.53.0 matching bug that can otherwise treat
+  blank CRLF lines as exclusions for every directory.
 - Unreadable regular `.gitignore` files or Git matching failures fail validation
   rather than silently including potentially excluded data. Symbolic
   `.gitignore` files are rejected and never followed. `--no-ignore` bypasses
