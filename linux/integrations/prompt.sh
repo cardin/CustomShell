@@ -48,3 +48,11 @@ if [[ "$PRETTY_PROMPT" == starship && ${CUSTOMSHELL_STARSHIP_INITIALIZED:-false}
 	fi
 	unset prompt_init
 fi
+
+# Bash before 5.1 executes only the first element of PROMPT_COMMAND arrays.
+if ((BASH_VERSINFO[0] < 5 || (BASH_VERSINFO[0] == 5 && BASH_VERSINFO[1] < 1))); then
+	printf -v customshell_prompt_hooks '%s\n' "${PROMPT_COMMAND[@]-}"
+	unset PROMPT_COMMAND
+	PROMPT_COMMAND=${customshell_prompt_hooks%$'\n'}
+	unset customshell_prompt_hooks
+fi
