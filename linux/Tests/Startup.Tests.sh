@@ -53,4 +53,25 @@ HOME="$test_root/home" USER=cardi-test PATH="$test_root/bin:$PATH" \
 	exit 1
 }
 
+HOME="$test_root/home" bash -u -c '
+    PRETTY_PROMPT=none
+    PROMPT_COMMAND=("printf z >>\"$HOME/prompt-hooks\";" "printf p >>\"$HOME/prompt-hooks\"")
+    source "$1"
+    source "$1"
+    if ((BASH_VERSINFO[0] < 5 || (BASH_VERSINFO[0] == 5 && BASH_VERSINFO[1] < 1))); then
+        eval "$PROMPT_COMMAND"
+    else
+        for hook in "${PROMPT_COMMAND[@]}"; do eval "$hook"; done
+    fi
+    [[ "$(cat "$HOME/prompt-hooks")" == zp ]] || exit 1
+    unset PROMPT_COMMAND
+    source "$1"
+    PROMPT_COMMAND=:
+    source "$1"
+    [[ "$PROMPT_COMMAND" == :* ]]
+' bash "$(dirname "${BASH_SOURCE[0]}")/../integrations/prompt.sh" || {
+	echo "FAIL: prompt hooks were not preserved" >&2
+	exit 1
+}
+
 echo "Startup tests passed"
