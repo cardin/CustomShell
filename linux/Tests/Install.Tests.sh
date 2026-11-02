@@ -151,11 +151,17 @@ HOME="$test_root/home" bash "$install_script" --force \
 	fail "backup did not preserve the original content"
 
 # Uninstall removes the block and managed links, restoring the original file.
+environment_file="$test_root/home/.config/environment.d/90-customshell.conf"
+mkdir -p "$(dirname -- "$environment_file")"
+printf 'GTK_OVERLAY_SCROLLING=0\n' >"$environment_file"
+run_install --uninstall --dry-run >/dev/null 2>&1 || fail "uninstall dry run failed"
+[[ -f "$environment_file" ]] || fail "uninstall dry run removed the environment.d file"
 run_install --uninstall >/dev/null 2>&1 || fail "uninstall failed"
 [[ "$(md5_of "$test_root/home/.bashrc")" == "$original_md5" ]] ||
 	fail "uninstall did not restore the original profile"
 [[ ! -e "$espanso_match/_base.yml" && ! -e "$espanso_config/whitelist.yml" ]] ||
 	fail "uninstall left managed links behind"
+[[ ! -e "$environment_file" ]] || fail "uninstall left the environment.d file behind"
 if command -v fdfind >/dev/null 2>&1; then
 	[[ ! -e "$fd_shim" && ! -L "$fd_shim" ]] || fail "uninstall left the fd shim behind"
 fi

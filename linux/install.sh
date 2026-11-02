@@ -48,7 +48,8 @@ repeatedly.
 Options:
   --check              Report current state without changing anything.
   --dry-run            Print intended actions without changing anything.
-  --uninstall          Remove the managed profile, links, and Git helper.
+  --uninstall          Remove the managed profile, links, Git helper, and
+                       generated environment.d file.
   --force              Replace conflicting configuration files (with backups).
   --bashrc <path>      Override the rc file to edit (default: ~/.bashrc).
   --espanso-root <dir> Override the Espanso configuration root.
@@ -126,6 +127,7 @@ install)
 uninstall)
 	customshell_git_uninstall || exit 1
 	remove_profile_block || exit 1
+	customshell_environment_uninstall || exit 1
 	unlink_espanso || exit 1
 	customshell_shims_unlink || exit 1
 	if [[ "$dry_run" == true ]]; then
