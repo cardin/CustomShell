@@ -126,6 +126,18 @@ missing or stale, and reports the `CUSTOM_CA_CERT` prerequisite (only needed on
 managed devices). Advisories about optional commands do not affect the exit
 status.
 
+### tmux clipboard compatibility
+
+The optional `allow-passthrough` setting requires tmux 3.3 or newer. The shared
+configuration uses `set -gq` so older versions skip the unsupported setting
+without a configuration error. Newer versions need the setting to explicitly
+enable passthrough; older versions already provide passthrough without it.
+
+Standard OSC 52 copying may still work on older tmux versions. Older releases
+also had DCS passthrough behavior, so the missing option does not by itself prove
+wrapped OSC 52 copying will fail. Both paths depend on the outer terminal's OSC 52
+support and permissions.
+
 ## Windows options
 
 ```text

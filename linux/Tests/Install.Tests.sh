@@ -8,6 +8,7 @@ set -u
 
 test_root="$(mktemp -d)" || exit 1
 trap 'rm -rf -- "$test_root"' EXIT
+export XDG_STATE_HOME="$test_root/state"
 
 install_script="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)/install.sh"
 repo_dir="$(cd -- "$(dirname -- "$install_script")/.." && pwd -P)"
@@ -85,7 +86,7 @@ grep -Fq "export GTK_OVERLAY_SCROLLING=0" "$test_root/home/.bashrc" ||
 grep -Fq "export UV_SYSTEM_CERTS=true" "$test_root/home/.bashrc" ||
 	fail "uv environment value was not added to the profile block"
 [[ "$(GIT_CONFIG_GLOBAL="$test_root/home/.gitconfig" git config --global --get-all credential.helper)" == "cache --timeout=21600" ]] || fail "Git credential helper was not configured"
-[[ -f "$test_root/home/.local/state/customshell/git-credential-helper" ]] ||
+[[ -f "$XDG_STATE_HOME/customshell/git-credential-helper" ]] ||
 	fail "previous Git credential helper was not recorded"
 [[ "$(grep -c -F "$marker_begin" "$test_root/home/.bashrc")" == 1 ]] ||
 	fail "expected exactly one managed block"
@@ -159,7 +160,7 @@ if command -v fdfind >/dev/null 2>&1; then
 	[[ ! -e "$fd_shim" && ! -L "$fd_shim" ]] || fail "uninstall left the fd shim behind"
 fi
 [[ "$(GIT_CONFIG_GLOBAL="$test_root/home/.gitconfig" git config --global --get-all credential.helper)" == $'store\nmanager-core' ]] || fail "uninstall did not restore the previous Git credential helpers"
-[[ ! -e "$test_root/home/.local/state/customshell/git-credential-helper" ]] ||
+[[ ! -e "$XDG_STATE_HOME/customshell/git-credential-helper" ]] ||
 	fail "uninstall left Git credential helper state behind"
 run_install --check >/dev/null 2>&1 && fail "check passed for an unconfigured setup"
 
