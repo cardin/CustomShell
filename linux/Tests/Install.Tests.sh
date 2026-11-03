@@ -57,15 +57,10 @@ md5_of() {
 	md5sum "$1" | cut -d' ' -f1
 }
 
-espanso_root="$test_root/home/.config/espanso"
-espanso_match="$espanso_root/match"
-espanso_config="$espanso_root/config"
-
 run_install() {
 	HOME="$test_root/home" XDG_BIN_HOME='' GIT_CONFIG_GLOBAL="$test_root/home/.gitconfig" \
 		bash "$install_script" \
-		--bashrc "$test_root/home/.bashrc" \
-		--espanso-root "$espanso_root" "$@"
+		--bashrc "$test_root/home/.bashrc" "$@"
 }
 
 mkdir -p "$test_root/home"
@@ -108,14 +103,6 @@ grep -Fq "/old/location/linux/main.sh" "$test_root/home/.bashrc" && fail "stale 
 [[ "$(grep -c -F "$marker_begin" "$test_root/home/.bashrc")" == 1 ]] ||
 	fail "stale rewrite duplicated the block"
 
-# Espanso links land in the directories Espanso expects and are idempotent.
-[[ -L "$espanso_match/_base.yml" ]] || fail "base espanso link missing"
-[[ -L "$espanso_config/whitelist.yml" ]] || fail "whitelist espanso link missing"
-[[ "$(readlink -f "$espanso_match/_base.yml")" == "$repo_dir/config/espanso/_base.yml" ]] ||
-	fail "base espanso link target is wrong"
-[[ "$(readlink -f "$espanso_config/whitelist.yml")" == "$repo_dir/config/espanso/whitelist.yml" ]] ||
-	fail "whitelist espanso link target is wrong"
-
 # The fd shim exposes fdfind under its expected name so scripts and
 # non-interactive shells see it, not only interactive aliases.
 fd_shim="$test_root/home/.local/bin/fd"
@@ -131,25 +118,6 @@ run_install --check >/dev/null 2>&1 || fail "check failed on a configured setup"
 [[ "$(md5_of "$test_root/home/.bashrc")" == "$check_md5" ]] ||
 	fail "check mode modified the profile"
 
-# A conflicting regular file is skipped without --force and backed up with it.
-conflict_root="$test_root/conflict/espanso"
-mkdir -p "$conflict_root/match"
-printf 'user data\n' >"$conflict_root/match/_base.yml"
-HOME="$test_root/home" bash "$install_script" \
-	--bashrc "$test_root/conflict/.bashrc" \
-	--espanso-root "$conflict_root" >/dev/null 2>&1 ||
-	fail "install failed while handling a conflict"
-[[ -f "$conflict_root/match/_base.yml" && ! -L "$conflict_root/match/_base.yml" ]] ||
-	fail "conflicting file was replaced without --force"
-HOME="$test_root/home" bash "$install_script" --force \
-	--bashrc "$test_root/conflict/.bashrc" \
-	--espanso-root "$conflict_root" >/dev/null 2>&1 ||
-	fail "forced install failed"
-[[ -L "$conflict_root/match/_base.yml" ]] || fail "forced install did not create the link"
-[[ -f "$conflict_root/match/_base.yml.customshell.bak" ]] || fail "forced install did not back up"
-[[ "$(cat "$conflict_root/match/_base.yml.customshell.bak")" == "user data" ]] ||
-	fail "backup did not preserve the original content"
-
 # Uninstall removes the block and managed links, restoring the original file.
 environment_file="$test_root/home/.config/environment.d/90-customshell.conf"
 mkdir -p "$(dirname -- "$environment_file")"
@@ -159,8 +127,6 @@ run_install --uninstall --dry-run >/dev/null 2>&1 || fail "uninstall dry run fai
 run_install --uninstall >/dev/null 2>&1 || fail "uninstall failed"
 [[ "$(md5_of "$test_root/home/.bashrc")" == "$original_md5" ]] ||
 	fail "uninstall did not restore the original profile"
-[[ ! -e "$espanso_match/_base.yml" && ! -e "$espanso_config/whitelist.yml" ]] ||
-	fail "uninstall left managed links behind"
 [[ ! -e "$environment_file" ]] || fail "uninstall left the environment.d file behind"
 if command -v fdfind >/dev/null 2>&1; then
 	[[ ! -e "$fd_shim" && ! -L "$fd_shim" ]] || fail "uninstall left the fd shim behind"
@@ -176,7 +142,7 @@ mkdir -p "$test_root/manual"
 printf '. %s\n' "$entry_script" >"$manual_rc"
 manual_md5="$(md5_of "$manual_rc")"
 manual_output="$(HOME="$test_root/home" bash "$install_script" \
-	--bashrc "$manual_rc" --espanso-root "$test_root/manual/espanso" 2>&1)" ||
+	--bashrc "$manual_rc" 2>&1)" ||
 	fail "install failed on an unmarked profile"
 [[ "$manual_output" == *"unmarked"* || "$manual_output" == *"already sources"* ]] ||
 	fail "unmarked source line was not reported"
@@ -190,26 +156,27 @@ mkdir -p "$test_root/malformed"
 printf '# before\n%s\n# orphaned customshell line\nalias keep=me\n' "$marker_begin" >"$malformed_rc"
 malformed_md5="$(md5_of "$malformed_rc")"
 if HOME="$test_root/home" bash "$install_script" \
-	--bashrc "$malformed_rc" --espanso-root "$test_root/malformed/espanso" >/dev/null 2>&1; then
+	--bashrc "$malformed_rc" >/dev/null 2>&1; then
 	fail "install accepted a malformed managed block"
 fi
 [[ "$(md5_of "$malformed_rc")" == "$malformed_md5" ]] ||
 	fail "malformed profile was modified"
 grep -Fq 'alias keep=me' "$malformed_rc" || fail "malformed profile lost unrelated content"
 HOME="$test_root/home" bash "$install_script" --check \
-	--bashrc "$malformed_rc" --espanso-root "$test_root/malformed/espanso" >/dev/null 2>&1 &&
+	--bashrc "$malformed_rc" >/dev/null 2>&1 &&
 	fail "check passed for a malformed managed block"
 
 # Dry-run changes nothing and creates no links.
 dry_rc="$test_root/dry/.bashrc"
+dry_bin="$test_root/dry/bin"
 mkdir -p "$test_root/dry"
 printf '# dry\n' >"$dry_rc"
 dry_md5="$(md5_of "$dry_rc")"
-HOME="$test_root/home" bash "$install_script" --dry-run \
-	--bashrc "$dry_rc" --espanso-root "$test_root/dry/espanso" >/dev/null 2>&1 ||
+HOME="$test_root/home" XDG_BIN_HOME="$dry_bin" bash "$install_script" --dry-run \
+	--bashrc "$dry_rc" >/dev/null 2>&1 ||
 	fail "dry-run failed"
 [[ "$(md5_of "$dry_rc")" == "$dry_md5" ]] || fail "dry-run modified the profile"
-[[ ! -e "$test_root/dry/espanso" ]] || fail "dry-run created espanso links"
+[[ ! -e "$dry_bin/fd" ]] || fail "dry-run created the fd shim"
 
 # Help exits successfully.
 bash "$install_script" --help >/dev/null 2>&1 || fail "help did not exit successfully"

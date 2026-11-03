@@ -23,9 +23,10 @@ bash <repo>/linux/install.sh
 - Persists the environment values listed under
   [Persistent environment](#persistent-environment).
 - Installs or registers shared tool configuration:
-  - Espanso: `config/espanso/_base.yml` and `config/espanso/whitelist.yml` are
-    installed into the `match/` and `config/` directories of the root Espanso
-    reports for itself. See [Espanso layout](#espanso-layout).
+  - Espanso (Windows): `config/espanso/_base.yml` and
+    `config/espanso/whitelist.yml` are installed into the `match/` and
+    `config/` directories of the root Espanso reports for itself. See
+    [Espanso layout](#espanso-layout).
   - Clink (Windows, when `clink` is available): registers `config/clink` as a
     Lua script path with `clink installscripts`; selects the Clink prompt from
     `Settings.psd1` (`oh-my-posh` with `ohmyposh.theme` set to
@@ -39,11 +40,9 @@ bash <repo>/linux/install.sh
     advisory.
   - Git (Linux, when `git` is available): configures the global credential cache
     with a six-hour timeout and records the previous helper values for uninstall.
-- Resolves the Espanso root by asking the tool (Windows tries `espansod path
-  config` then `espanso path config`; Linux tries `espanso` then `espansod`),
-  then falls back to the platform default (`%APPDATA%\espanso` on Windows,
-  `${XDG_CONFIG_HOME:-~/.config}/espanso` on Linux). The `-EspansoRoot` /
-  `--espanso-root` option overrides detection.
+- Resolves the Espanso root on Windows by asking the tool (`espansod path
+  config` then `espanso path config`), then falls back to
+  `%APPDATA%\espanso`. The `-EspansoRoot` option overrides detection.
 - Reports unavailable expected commands on every run; `-Check` / `--check` also
   reports setup freshness. Missing optional tools never fail the run, and
   profile startup does not enumerate commands.
@@ -103,28 +102,25 @@ they start.
 ```text
 --check              Report current state without changing anything.
 --dry-run            Print intended actions without changing anything.
---uninstall          Remove the managed profile, links, and Git helper.
---force              Replace conflicting Espanso files (with a backup).
+--uninstall          Remove the managed profile, links, Git helper, and
+                     generated environment.d file.
 --bashrc <path>      Override the rc file to edit.
---espanso-root <dir> Override the Espanso configuration root.
 -h, --help           Show help and exit.
 ```
 
-Linux links `config/espanso/_base.yml` into `<root>/match` and
-`config/espanso/whitelist.yml` into `<root>/config`. A conflicting regular file
-is skipped unless `--force` is given, in which case it is moved to
-`<file>.customshell.bak` before linking. `--uninstall` removes only links that
-still point into the repository.
+Linux installs no Espanso configuration; Espanso integration is Windows-only.
+Links created by older versions are not removed automatically: delete
+`<root>/match/_base.yml` and `<root>/config/whitelist.yml` if they still point
+into the repository.
 
 Linux records previous global Git credential-helper values under
 `${XDG_STATE_HOME:-~/.local/state}/customshell/`. `--uninstall` restores them
 only while the configured cache helper is still unchanged; a locally modified
 helper is reported and kept.
 
-`--check` exits non-zero when the profile block, Espanso links, or Git helper are
-missing or stale, and reports the `CUSTOM_CA_CERT` prerequisite (only needed on
-managed devices). Advisories about optional commands do not affect the exit
-status.
+`--check` exits non-zero when the profile block or Git helper are missing or
+stale, and reports the `CUSTOM_CA_CERT` prerequisite (only needed on managed
+devices). Advisories about optional commands do not affect the exit status.
 
 ### tmux clipboard compatibility
 
@@ -179,7 +175,6 @@ find and test:
 linux/install.sh              linux/install/common.sh
                               linux/install/profile.sh
                               linux/install/environment.sh
-                              linux/install/espanso.sh
                               linux/install/git.sh
                               linux/install/checks.sh
 

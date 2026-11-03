@@ -62,22 +62,6 @@ report_checks() {
 		check_failures=$((check_failures + 1))
 	fi
 
-	local source destination target
-	local links_ok=true
-	for source in "${espanso_sources[@]}"; do
-		destination="$(espanso_destination_dir "$source")/$(basename -- "$source")"
-		target="$(resolve_link_target "$destination")"
-		if [[ "$target" != "$source" ]]; then
-			links_ok=false
-		fi
-	done
-	if [[ "$links_ok" == true ]]; then
-		say "  espanso:    linked ($espanso_root)"
-	else
-		say "  espanso:    not linked ($espanso_root) - run install.sh"
-		check_failures=$((check_failures + 1))
-	fi
-
 	if ! customshell_shims_check; then
 		check_failures=$((check_failures + 1))
 	fi
