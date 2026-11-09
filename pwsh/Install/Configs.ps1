@@ -14,6 +14,7 @@ function Install-Configs {
             -Manifest ([ref]$manifest)
     }
 
+    $manifest = @(Remove-LegacyConfigFiles -Entries $manifest)
     Save-ManifestEntries -Entries $manifest
 }
 
@@ -71,12 +72,51 @@ function Get-ExpectedConfigPaths {
 function Get-ExpectedConfigEntries {
     return @(
         [pscustomobject]@{
-            Source      = Join-Path $configDir 'espanso/_base.yml'
-            Destination = Join-Path $EspansoMatchDir '_base.yml'
-        }
-        [pscustomobject]@{
-            Source      = Join-Path $configDir 'espanso/whitelist.yml'
-            Destination = Join-Path $EspansoConfigDir 'whitelist.yml'
+            Source      = Join-Path $configDir 'espanso/customshell.yml'
+            Destination = Join-Path $EspansoMatchDir 'customshell.yml'
         }
     )
+}
+
+# Get-LegacyConfigDestinations
+# Destinations installed by older releases: the underscore-prefixed base file and
+# the whitelist profile that included it.
+function Get-LegacyConfigDestinations {
+    return @(
+        (Join-Path $EspansoMatchDir '_base.yml')
+        (Join-Path $EspansoConfigDir 'whitelist.yml')
+    )
+}
+
+# Remove-LegacyConfigFiles
+# Removes destinations that older releases recorded in the manifest, so an
+# upgrade does not leave the whitelist profile active. Files that the manifest
+# does not track are left untouched.
+function Remove-LegacyConfigFiles {
+    param(
+        [Parameter(Mandatory)]
+        [AllowEmptyCollection()]
+        [string[]] $Entries
+    )
+
+    $legacy = @(Get-LegacyConfigDestinations)
+    $kept = @()
+    foreach ($entry in $Entries) {
+        if ($legacy -notcontains $entry) {
+            $kept += $entry
+            continue
+        }
+
+        if (Test-Path -LiteralPath $entry) {
+            if ($DryRun) {
+                Write-Host "Would remove legacy configuration $entry"
+            }
+            else {
+                Remove-Item -LiteralPath $entry -Force
+                Write-Host "Removed legacy configuration $entry"
+            }
+        }
+    }
+
+    return $kept
 }

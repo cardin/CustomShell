@@ -23,9 +23,8 @@ bash <repo>/linux/install.sh
 - Persists the environment values listed under
   [Persistent environment](#persistent-environment).
 - Installs or registers shared tool configuration:
-  - Espanso (Windows): `config/espanso/_base.yml` and
-    `config/espanso/whitelist.yml` are installed into the `match/` and
-    `config/` directories of the root Espanso reports for itself. See
+  - Espanso (Windows): `config/espanso/customshell.yml` is installed into the
+    `match/` directory of the root Espanso reports for itself. See
     [Espanso layout](#espanso-layout).
   - Clink (Windows, when `clink` is available): registers `config/clink` as a
     Lua script path with `clink installscripts`; selects the Clink prompt from
@@ -109,7 +108,7 @@ they start.
 ```
 
 Linux installs no Espanso configuration; Espanso integration is Windows-only.
-Links created by older versions are not removed automatically: delete
+On Linux, links created by older versions are not removed automatically: delete
 `<root>/match/_base.yml` and `<root>/config/whitelist.yml` if they still point
 into the repository.
 
@@ -152,10 +151,12 @@ support and permissions.
 -EnvironmentScope     User (default) or Process. Process is for testing only.
 ```
 
-Windows copies `config/espanso/_base.yml` into `<root>\match` and
-`config/espanso/whitelist.yml` into `<root>\config`, recording destinations in
-`%LOCALAPPDATA%\CustomShell\installed.txt`. A conflicting file is skipped unless
-`-Force` is given, in which case it is backed up to `<file>.customshell.bak`.
+Windows copies `config/espanso/customshell.yml` into `<root>\match`, recording
+the destination in `%LOCALAPPDATA%\CustomShell\installed.txt`. On upgrade it also
+removes the managed `_base.yml` and `whitelist.yml` files installed by older
+releases; files the manifest does not track are left alone. A conflicting file
+is skipped unless `-Force` is given, in which case it is backed up to
+`<file>.customshell.bak`.
 `-Uninstall` removes only tracked files that still match the shipped source, and
 reports and keeps locally modified files. Clink state is tracked separately in
 `%LOCALAPPDATA%\CustomShell\clink.json`.
@@ -198,9 +199,10 @@ and `plain-text-symbols.toml` otherwise.
 ## Espanso layout
 
 Espanso keeps its configuration under a single root containing `config/` and
-`match/`. The repository follows that layout: `whitelist.yml` lives in `config/`
-and its `includes: ../match/_base.yml` resolves to the `_base.yml` installed in
-`match/`.
+`match/`. The repository follows that layout: `customshell.yml` is installed
+into `match/`, where Espanso loads every YAML file whose name does not start
+with an underscore. The file is therefore active in every application;
+app-specific filtering is not used.
 
 Scoop installs Espanso in portable mode, so the root is a `.espanso` junction
 under `scoop\persist\espanso` (reported by `espanso path config` as the

@@ -1,3 +1,0 @@
-filter_title: "OneNote|Excel|Word|Powerpoint|Outlook|Chrome|Edge|Teams"
-includes:
-  - "../match/_base.yml"

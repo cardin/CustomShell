@@ -336,17 +336,14 @@ switch ($command) {
 
         $result.ExitCode | Should -Be 0
 
-        $baseSource = Join-Path $repoDir 'config\espanso\_base.yml'
-        $baseDestination = Join-Path $espansoMatchDir '_base.yml'
+        $baseSource = Join-Path $repoDir 'config\espanso\customshell.yml'
+        $baseDestination = Join-Path $espansoMatchDir 'customshell.yml'
         Test-Path -LiteralPath $baseDestination | Should -Be $true
         (Get-FileHash -LiteralPath $baseDestination).Hash |
             Should -Be (Get-FileHash -LiteralPath $baseSource).Hash
 
-        $whitelistSource = Join-Path $repoDir 'config\espanso\whitelist.yml'
-        $whitelistDestination = Join-Path $espansoConfigDir 'whitelist.yml'
-        Test-Path -LiteralPath $whitelistDestination | Should -Be $true
-        (Get-FileHash -LiteralPath $whitelistDestination).Hash |
-            Should -Be (Get-FileHash -LiteralPath $whitelistSource).Hash
+        Test-Path -LiteralPath (Join-Path $espansoConfigDir 'whitelist.yml') |
+            Should -Be $false
 
         # Clink scripts are registered from the repository, not copied.
         Test-Path -LiteralPath $clinkDir | Should -Be $false
@@ -359,6 +356,33 @@ switch ($command) {
             Should -Be (Join-Path $repoDir 'config\omp\catppuccin_gruvbox.json')
 
         Test-Path -LiteralPath (Join-Path $stateDir 'installed.txt') | Should -Be $true
+    }
+
+    It 'removes whitelist files recorded by older installs' {
+        New-Item -ItemType Directory -Path $espansoMatchDir, $espansoConfigDir, $stateDir -Force | Out-Null
+        $legacyBase = Join-Path $espansoMatchDir '_base.yml'
+        $legacyWhitelist = Join-Path $espansoConfigDir 'whitelist.yml'
+        Set-Content -LiteralPath $legacyBase -Value 'old base'
+        Set-Content -LiteralPath $legacyWhitelist -Value 'old whitelist'
+        Set-Content -LiteralPath (Join-Path $stateDir 'installed.txt') -Value @($legacyBase, $legacyWhitelist)
+
+        $result = Invoke-Installer
+
+        $result.ExitCode | Should -Be 0
+        Test-Path -LiteralPath $legacyBase | Should -Be $false
+        Test-Path -LiteralPath $legacyWhitelist | Should -Be $false
+        Test-Path -LiteralPath (Join-Path $espansoMatchDir 'customshell.yml') | Should -Be $true
+    }
+
+    It 'leaves untracked whitelist files alone' {
+        New-Item -ItemType Directory -Path $espansoConfigDir -Force | Out-Null
+        $whitelist = Join-Path $espansoConfigDir 'whitelist.yml'
+        Set-Content -LiteralPath $whitelist -Value 'user file'
+
+        $result = Invoke-Installer
+
+        $result.ExitCode | Should -Be 0
+        (Get-Content -LiteralPath $whitelist -Raw).Trim() | Should -Be 'user file'
     }
 
     It 'sets and records the persistent environment values' {
@@ -414,20 +438,20 @@ switch ($command) {
 
     It 'skips a conflicting file without -Force and backs it up with -Force' {
         New-Item -ItemType Directory -Path $espansoMatchDir -Force | Out-Null
-        Set-Content -LiteralPath (Join-Path $espansoMatchDir '_base.yml') -Value 'user data'
+        Set-Content -LiteralPath (Join-Path $espansoMatchDir 'customshell.yml') -Value 'user data'
 
         $first = Invoke-Installer
         $first.ExitCode | Should -Be 0
-        (Get-Content -LiteralPath (Join-Path $espansoMatchDir '_base.yml') -Raw).Trim() |
+        (Get-Content -LiteralPath (Join-Path $espansoMatchDir 'customshell.yml') -Raw).Trim() |
             Should -Be 'user data'
 
         $second = Invoke-Installer -Arguments @('-Force')
         $second.ExitCode | Should -Be 0
 
-        $baseSource = Join-Path $repoDir 'config\espanso\_base.yml'
-        (Get-FileHash -LiteralPath (Join-Path $espansoMatchDir '_base.yml')).Hash |
+        $baseSource = Join-Path $repoDir 'config\espanso\customshell.yml'
+        (Get-FileHash -LiteralPath (Join-Path $espansoMatchDir 'customshell.yml')).Hash |
             Should -Be (Get-FileHash -LiteralPath $baseSource).Hash
-        (Get-Content -LiteralPath (Join-Path $espansoMatchDir '_base.yml.customshell.bak') -Raw).Trim() |
+        (Get-Content -LiteralPath (Join-Path $espansoMatchDir 'customshell.yml.customshell.bak') -Raw).Trim() |
             Should -Be 'user data'
     }
 
@@ -440,7 +464,7 @@ switch ($command) {
 
         $result.ExitCode | Should -Be 0
         (Get-FileHash -LiteralPath $profilePath).Hash | Should -Be $before
-        Test-Path -LiteralPath (Join-Path $espansoMatchDir '_base.yml') | Should -Be $false
+        Test-Path -LiteralPath (Join-Path $espansoMatchDir 'customshell.yml') | Should -Be $false
         Test-Path -LiteralPath (Join-Path $espansoConfigDir 'whitelist.yml') | Should -Be $false
         Test-Path -LiteralPath (Join-Path $stateDir 'installed.txt') | Should -Be $false
         Test-Path -LiteralPath $environmentRecord | Should -Be $false
@@ -480,7 +504,7 @@ switch ($command) {
 
     It 'reports an installed configuration file as stale when it is modified' {
         Invoke-Installer | Out-Null
-        Add-Content -LiteralPath (Join-Path $espansoMatchDir '_base.yml') -Value '# local change'
+        Add-Content -LiteralPath (Join-Path $espansoMatchDir 'customshell.yml') -Value '# local change'
 
         $result = Invoke-Installer -Arguments @('-Check')
 
