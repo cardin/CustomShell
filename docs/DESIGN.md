@@ -21,6 +21,9 @@ member validation and for generating the `Protect-Tar` entry list.
   interactive contexts and remains suppressed in embedded or nested sessions.
 - Prompt engines initialize before zoxide so its directory-tracking hook wraps
   the final prompt function and remains active.
+- WSL sessions keep the glyph prompt themes because the attached terminal is a
+  Windows-side one, even when the session was not launched by `wsl.exe` (SSH or
+  `su -`). The ASCII fallback is reserved for bare native-Linux sessions.
 - Bash initializes Oh My Posh with `--strict`, keeping the executable a `PATH`
   lookup instead of a resolved versioned path. This stops an in-place
   linuxbrew/Homebrew upgrade from deleting the binary a running prompt still

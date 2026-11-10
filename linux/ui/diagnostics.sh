@@ -6,8 +6,10 @@
 # Show-Help
 # Displays a short reference for commonly used CustomShell and CLI commands.
 Show-Help() {
+	# Plain fallback for non-UTF-8 locales and bare terminals (for example SSH).
 	if [[ ${UTF8_ENABLED:-false} != true || ${IS_BARE_TERMINAL:-false} == true ]]; then
 		echo -e "${Blue}CustomShell commands${Color_Off}"
+		# WSL-only helpers, which do not exist on native Linux.
 		if [[ "$IS_WSL" == true ]]; then
 			echo "wcd / wpushd / cmd / release-ram / mirror-win-ssh"
 		fi
@@ -18,6 +20,7 @@ Show-Help() {
 
 	echo -e "$Blue󰗉󰗉󰗉 Show-Help 󰗉󰗉󰗉"
 
+	# WSL-only command set for the glyph form; other hosts list local tools.
 	if [[ "$IS_WSL" == true ]]; then
 		echo -e "$Green•  wcd ~ / wpushd / cmd / dos2unix / release-ram / mirror-win-ssh / \$USERPROFILE"
 	else

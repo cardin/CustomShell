@@ -4,7 +4,10 @@
 # session. Empty or failed initialization output is ignored.
 
 if [[ "$PRETTY_PROMPT" == ohmyposh && ${CUSTOMSHELL_OMP_INITIALIZED:-false} != true ]] && command -v oh-my-posh >/dev/null 2>&1; then
-	if [[ "$IS_BARE_TERMINAL" == true ]]; then
+	# WSL targets a Windows-side terminal, so keep the glyph theme even when the
+	# session was not launched by wsl.exe (SSH, su -). Only native-Linux bare
+	# sessions fall back to the ASCII theme.
+	if [[ "$IS_BARE_TERMINAL" == true && ${IS_WSL:-false} != true ]]; then
 		export OMP_THEME="ascii"
 	else
 		export OMP_THEME="catppuccin_gruvbox"
@@ -25,7 +28,8 @@ fi
 
 if [[ "$PRETTY_PROMPT" == starship && ${CUSTOMSHELL_STARSHIP_INITIALIZED:-false} != true ]] && command -v starship >/dev/null 2>&1; then
 	# Point Starship at the repository config instead of linking ~/.config.
-	if [[ "$IS_BARE_TERMINAL" == true ]]; then
+	# Same policy as Oh My Posh above: WSL always gets the glyph theme.
+	if [[ "$IS_BARE_TERMINAL" == true && ${IS_WSL:-false} != true ]]; then
 		export STARSHIP_CONFIG="$PROJ_DIR/config/starship/plain-text-symbols.toml"
 	else
 		export STARSHIP_CONFIG="$PROJ_DIR/config/starship/catppuccin-powerline.toml"

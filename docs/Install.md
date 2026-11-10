@@ -198,6 +198,11 @@ and `config/starship/`. Starship is pointed at the repository theme through
 `STARSHIP_CONFIG`, choosing `catppuccin-powerline.toml` for standalone terminals
 and `plain-text-symbols.toml` otherwise.
 
+WSL always uses the glyph themes: `catppuccin_gruvbox` for Oh My Posh and
+`catppuccin-powerline.toml` for Starship, including sessions started by SSH or
+`su -` that were not launched by `wsl.exe`. Only bare native-Linux sessions fall
+back to `ascii` and `plain-text-symbols.toml`.
+
 ## Espanso layout
 
 Espanso keeps its configuration under a single root containing `config/` and

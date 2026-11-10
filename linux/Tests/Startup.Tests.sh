@@ -25,7 +25,11 @@ echo "SSH_AGENT_PID=12345; export SSH_AGENT_PID;"
 EOF
 mkdir -p "$test_root/home/.local/share/fnm"
 printf '#!/usr/bin/env bash\nprintf ":\\n"\n' >"$test_root/home/.local/share/fnm/fnm"
+printf '#!/usr/bin/env bash\nprintf "CUSTOMSHELL_TEST_INIT=1\\n"\n' \
+	>"$test_root/bin/oh-my-posh"
+printf '#!/usr/bin/env bash\nexit 0\n' >"$test_root/bin/starship"
 chmod +x "$test_root/bin/git" "$test_root/bin/ssh-add" "$test_root/bin/ssh-agent"
+chmod +x "$test_root/bin/oh-my-posh" "$test_root/bin/starship"
 chmod +x "$test_root/home/.local/share/fnm/fnm"
 
 main_script="$(dirname "${BASH_SOURCE[0]}")/../main.sh"
@@ -73,5 +77,40 @@ HOME="$test_root/home" bash -u -c '
 	echo "FAIL: prompt hooks were not preserved" >&2
 	exit 1
 }
+
+# Theme selection: WSL always targets a Windows-side terminal and keeps the
+# glyph theme, even in a bare session such as SSH; native Linux bare sessions
+# keep the ASCII fallback.
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)"
+prompt_script="$repo_root/linux/integrations/prompt.sh"
+
+# check_prompt_selection runs prompt.sh with a prompt engine and terminal
+# context, then compares the engine's configuration variable to the expectation.
+check_prompt_selection() {
+	local pretty="$1" is_wsl="$2" bare="$3" variable="$4" expected="$5" actual
+	actual="$(PRETTY_PROMPT="$pretty" IS_WSL="$is_wsl" IS_BARE_TERMINAL="$bare" \
+		PROJ_DIR="$repo_root" PATH="$test_root/bin:$PATH" bash -u -c '
+        source "$1"
+        printf "%s" "${!2:-}"
+    ' bash "$prompt_script" "$variable")" ||
+		{
+			echo "FAIL: $pretty initialization failed (WSL=$is_wsl bare=$bare)" >&2
+			exit 1
+		}
+	[[ "$actual" == "$expected" ]] || {
+		echo "FAIL: $pretty under WSL=$is_wsl bare=$bare selected '$actual', expected '$expected'" >&2
+		exit 1
+	}
+}
+
+check_prompt_selection ohmyposh true true OMP_THEME catppuccin_gruvbox
+check_prompt_selection ohmyposh false true OMP_THEME ascii
+check_prompt_selection ohmyposh false false OMP_THEME catppuccin_gruvbox
+check_prompt_selection starship true true STARSHIP_CONFIG \
+	"$repo_root/config/starship/catppuccin-powerline.toml"
+check_prompt_selection starship false true STARSHIP_CONFIG \
+	"$repo_root/config/starship/plain-text-symbols.toml"
+check_prompt_selection starship false false STARSHIP_CONFIG \
+	"$repo_root/config/starship/catppuccin-powerline.toml"
 
 echo "Startup tests passed"
