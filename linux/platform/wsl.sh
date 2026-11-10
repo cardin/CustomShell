@@ -14,13 +14,34 @@ if command -v code >/dev/null 2>&1; then
     export EDITOR="${EDITOR:-code --wait}"
 fi
 
+# Locate Windows cmd.exe without relying on PATH. Distributions that set PATH
+# in /etc/environment replace the WSL PATH that includes the Windows
+# directories, so fall back to the mounted Windows system directory. Set
+# CUSTOMSHELL_WINDOWS_MOUNT when the drives are mounted outside /mnt.
+customshell_cmd_exe=""
+if command -v cmd.exe >/dev/null 2>&1; then
+    customshell_cmd_exe="$(command -v cmd.exe)"
+else
+    customshell_windows_mount="${CUSTOMSHELL_WINDOWS_MOUNT:-/mnt}"
+    for customshell_candidate in \
+        "$customshell_windows_mount"/*/Windows/System32/cmd.exe \
+        "$customshell_windows_mount"/*/Windows/system32/cmd.exe; do
+        if [[ -x "$customshell_candidate" ]]; then
+            customshell_cmd_exe="$customshell_candidate"
+            break
+        fi
+    done
+fi
+
 # Open links with the default Windows browser on any WSL device so tools such
 # as `npm login` use the Windows-side GUI instead of requiring a Linux browser.
 # sensible-browser evals $BROWSER, so export a generated space-free wrapper
 # that hands URLs to the Windows default browser through cmd.exe.
-if [[ -z ${BROWSER:-} ]] && command -v cmd.exe >/dev/null 2>&1; then
+if [[ -z ${BROWSER:-} && -n "$customshell_cmd_exe" &&
+    "$customshell_cmd_exe" != *'"'* && "$customshell_cmd_exe" != *"'"* &&
+    "$customshell_cmd_exe" != *$'\n'* ]]; then
     customshell_wrapper="${HOME:?HOME is not set}/.cache/customshell/windows-browser"
-    customshell_wrapper_content="$(printf '#!/bin/sh\n# Open files or URLs with the default Windows browser from WSL.\n# CustomShell maintains this wrapper; see linux/platform/wsl.sh.\nexec cmd.exe /C start "" "$@"\n')"
+    customshell_wrapper_content="$(printf '#!/bin/sh\n# Open files or URLs with the default Windows browser from WSL.\n# CustomShell maintains this wrapper; see linux/platform/wsl.sh.\nexec "%s" /C start "" "$@"\n' "$customshell_cmd_exe")"
     if [[ ! -f "$customshell_wrapper" ||
         "$(<"$customshell_wrapper")" != "$customshell_wrapper_content" ]]; then
         mkdir -p -- "$(dirname -- "$customshell_wrapper")" &&
@@ -30,8 +51,9 @@ if [[ -z ${BROWSER:-} ]] && command -v cmd.exe >/dev/null 2>&1; then
         chmod 755 -- "$customshell_wrapper"
     fi
     [[ -x "$customshell_wrapper" ]] && export BROWSER="$customshell_wrapper"
-    unset customshell_wrapper customshell_wrapper_content
 fi
+unset customshell_cmd_exe customshell_candidate customshell_windows_mount
+unset customshell_wrapper customshell_wrapper_content
 
 # wcd
 # Changes directory using a Windows-style path converted by wslpath.

@@ -46,7 +46,9 @@ member validation and for generating the `Protect-Tar` entry list.
 - On WSL, startup defaults `BROWSER` to a generated wrapper under
   `~/.cache/customshell/` that hands links to the default Windows browser
   through `cmd.exe`, so tools like `npm login` open links on the Windows side.
-  An existing `BROWSER` value is never overwritten.
+  It locates `cmd.exe` even when `/etc/environment` has replaced the WSL `PATH`
+  that would include the Windows directories, falling back to the mounted
+  Windows system drive. An existing `BROWSER` value is never overwritten.
 
 ## Setup and upgrades
 

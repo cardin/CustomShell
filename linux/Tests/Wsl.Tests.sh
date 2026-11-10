@@ -91,12 +91,36 @@ run_wsl_sh '
     echo stale >"$BROWSER"
     unset BROWSER
     source "$1"
-    grep -q "cmd.exe /C start" "$BROWSER" || exit 2
+    grep -q "/C start" "$BROWSER" || exit 2
     "$BROWSER" https://example.com | grep -q "^FAKE-CMD " || exit 3
 ' || fail "stale BROWSER wrapper was not regenerated"
 
-# Without Windows interop there is no cmd.exe, so BROWSER is left unset.
-Blue="" HOME="$browser_root/home" PATH="/usr/bin:/bin" bash -u -c '
+# Without cmd.exe on PATH, the wrapper must find the mounted Windows binary.
+win_mount="$browser_root/winmount"
+mkdir -p "$win_mount/c/Windows/System32"
+cat >"$win_mount/c/Windows/System32/cmd.exe" <<'EOF'
+#!/usr/bin/env bash
+if [[ ${1:-} == /C && ${2:-} == start ]]; then
+    printf 'FAKE-MOUNT-CMD %s\n' "${*:4}"
+fi
+exit 0
+EOF
+chmod +x "$win_mount/c/Windows/System32/cmd.exe"
+
+Blue="" HOME="$browser_root/home" PATH="/usr/bin:/bin" \
+    USERPROFILE="$browser_root/home" CUSTOMSHELL_WINDOWS_MOUNT="$win_mount" \
+    bash -u -c '
+    source "$1"
+    [[ "${BROWSER:-}" == "$HOME/.cache/customshell/windows-browser" ]] || exit 2
+    "$BROWSER" https://example.com | grep -q "^FAKE-MOUNT-CMD https://example.com$" || exit 3
+' bash "$(dirname "${BASH_SOURCE[0]}")/../platform/wsl.sh" ||
+    fail "BROWSER wrapper did not use the mounted Windows cmd.exe"
+
+# With neither cmd.exe on PATH nor a Windows mount, BROWSER is left unset.
+mkdir -p "$browser_root/empty"
+Blue="" HOME="$browser_root/home" PATH="/usr/bin:/bin" \
+    USERPROFILE="$browser_root/home" CUSTOMSHELL_WINDOWS_MOUNT="$browser_root/empty" \
+    bash -u -c '
     source "$1"
     [[ -z "${BROWSER:-}" ]]
 ' bash "$(dirname "${BASH_SOURCE[0]}")/../platform/wsl.sh" ||
