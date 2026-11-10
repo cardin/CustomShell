@@ -72,7 +72,9 @@ unless noted):
   profile block and publishes it to
   `~/.config/environment.d/90-customshell.conf` for the systemd user session.
 - `WSLENV=USERPROFILE/up` — share the Windows user-profile path with WSL,
-  translating the path and applying only from Windows to WSL.
+  translating the path and applying only from Windows to WSL. Sessions that do
+  not inherit it, such as SSH or `su -`, have WSL startup recover the value
+  through Windows interop.
 - `CONDA_PATH=<directory containing conda.exe>` — set when conda is found on
   `PATH`, so profile startup can lazily initialize conda. It is not set when
   conda is absent, and an existing valid value is respected and left unmanaged.

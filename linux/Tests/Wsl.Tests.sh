@@ -20,8 +20,17 @@ cat >"$test_root/bin/cmd.exe" <<'EOF'
 #!/usr/bin/env bash
 if [[ ${1:-} == /C && ${2:-} == start ]]; then
     printf 'FAKE-CMD %s\n' "${*:4}"
+elif [[ ${1:-} == /C && ${2:-} == 'echo %USERPROFILE%' ]]; then
+    printf '%s\n' "${FAKE_WIN_PROFILE:-}"
 fi
 exit 0
+EOF
+cat >"$test_root/bin/wslpath" <<'EOF'
+#!/usr/bin/env bash
+# Stands in for wslpath -u so the interop fallback is testable off WSL.
+[[ ${1:-} == -u && -n ${2:-} ]] || exit 1
+[[ -n ${FAKE_WSLPATH_RESULT:-} ]] || exit 1
+printf '%s\n' "$FAKE_WSLPATH_RESULT"
 EOF
 printf '#!/usr/bin/env bash\nexit 0\n' >"$test_root/bin/code"
 cat >"$test_root/bin/rsync" <<'EOF'
@@ -29,7 +38,36 @@ cat >"$test_root/bin/rsync" <<'EOF'
 [[ ${RSYNC_FAIL:-false} == true ]] && exit 1
 cp -a -- "$2/." "$3/"
 EOF
-chmod +x "$test_root/bin/code" "$test_root/bin/cmd.exe" "$test_root/bin/rsync"
+chmod +x "$test_root/bin/code" "$test_root/bin/cmd.exe" \
+    "$test_root/bin/wslpath" "$test_root/bin/rsync"
+
+# USERPROFILE recovery: sshd and "su -" sessions do not inherit the value that
+# wsl.exe translates through WSLENV, so startup recovers it through interop.
+FAKE_WIN_PROFILE='C:\Users\Test User' FAKE_WSLPATH_RESULT="$test_root/windows" \
+    Blue="" HOME="$test_root/home" PATH="$test_root/bin:$PATH" bash -u -c '
+    unset USERPROFILE
+    source "$1" >"$2" 2>&1
+    [[ "$USERPROFILE" == "$FAKE_WSLPATH_RESULT" ]] || exit 2
+    [[ ! -s "$2" ]] || exit 3
+' bash "$(dirname "${BASH_SOURCE[0]}")/../platform/wsl.sh" "$test_root/recovery.out" ||
+    fail "USERPROFILE was not recovered through interop"
+
+FAKE_WIN_PROFILE='' FAKE_WSLPATH_RESULT="$test_root/windows" \
+    Blue="" HOME="$test_root/home" PATH="$test_root/bin:$PATH" bash -u -c '
+    unset USERPROFILE
+    source "$1" >"$2" 2>&1
+    [[ -z ${USERPROFILE:-} ]] || exit 2
+    grep -q "Need to share WSL variable" "$2" || exit 3
+' bash "$(dirname "${BASH_SOURCE[0]}")/../platform/wsl.sh" "$test_root/recovery.out" ||
+    fail "missing USERPROFILE did not warn after a failed recovery"
+
+FAKE_WIN_PROFILE='C:\Other' FAKE_WSLPATH_RESULT="$test_root/windows" \
+    Blue="" HOME="$test_root/home" PATH="$test_root/bin:$PATH" \
+    USERPROFILE="$test_root/windows" bash -u -c '
+    source "$1" >/dev/null 2>&1
+    [[ "$USERPROFILE" == "$2" ]] || exit 2
+' bash "$(dirname "${BASH_SOURCE[0]}")/../platform/wsl.sh" "$test_root/windows" ||
+    fail "existing USERPROFILE was overwritten"
 
 echo "old" >"$test_root/home/.ssh/old-key"
 echo "new" >"$test_root/windows/.ssh/new-key"

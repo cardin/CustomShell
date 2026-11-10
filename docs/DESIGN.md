@@ -49,6 +49,11 @@ member validation and for generating the `Protect-Tar` entry list.
   It locates `cmd.exe` even when `/etc/environment` has replaced the WSL `PATH`
   that would include the Windows directories, falling back to the mounted
   Windows system drive. An existing `BROWSER` value is never overwritten.
+- `USERPROFILE` normally arrives already translated to a Linux path because
+  `wsl.exe` shares it through `WSLENV`, but sessions started by `sshd` or
+  `su -` never inherit that translation. WSL startup recovers the value through
+  Windows interop and converts it with `wslpath`, so WSL-only helpers such as
+  `mirror-win-ssh` keep working; it warns only when neither path yields one.
 
 ## Setup and upgrades
 

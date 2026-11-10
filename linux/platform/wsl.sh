@@ -3,7 +3,34 @@
 # Defines WSL-only interoperability and maintenance commands. This file is
 # sourced only after WSL detection and color initialization.
 
-if [[ -z ${USERPROFILE+x} ]]; then
+# wsl.exe shares USERPROFILE through WSLENV and translates it to a Linux path,
+# but sessions started by sshd or "su -" never inherit that translation. This
+# file is sourced only on WSL, so recover the value through Windows interop
+# before warning; never hardcode a user profile path.
+if [[ -z ${USERPROFILE:-} ]]; then
+    customshell_cmd_exe="$(command -v cmd.exe 2>/dev/null || true)"
+    if [[ -z "$customshell_cmd_exe" ]]; then
+        for customshell_candidate in /mnt/*/Windows/System32/cmd.exe /Windows/System32/cmd.exe; do
+            if [[ -x "$customshell_candidate" ]]; then
+                customshell_cmd_exe="$customshell_candidate"
+                break
+            fi
+        done
+    fi
+    if [[ -n "$customshell_cmd_exe" && -x "$customshell_cmd_exe" ]] &&
+        command -v wslpath >/dev/null 2>&1; then
+        customshell_win_profile="$("$customshell_cmd_exe" /C 'echo %USERPROFILE%' 2>/dev/null | tr -d '\r')"
+        if [[ "$customshell_win_profile" == [A-Za-z]:* ]]; then
+            customshell_linux_profile="$(wslpath -u "$customshell_win_profile" 2>/dev/null || true)"
+            if [[ -d "$customshell_linux_profile" ]]; then
+                export USERPROFILE="$customshell_linux_profile"
+            fi
+        fi
+    fi
+    unset customshell_cmd_exe customshell_candidate customshell_win_profile customshell_linux_profile
+fi
+
+if [[ -z ${USERPROFILE:-} ]]; then
     echo -e "${Blue}Need to share WSL variable \$USERPROFILE!"
     echo -e "${Blue}Ignore this error if you're using \"su -\". Next time, use \"su root\"."
 fi
