@@ -62,6 +62,30 @@ report_checks() {
 		check_failures=$((check_failures + 1))
 	fi
 
+	local posix_profile_state
+	posix_profile_state="$(posix_profile_block_state)"
+	if [[ "$posix_profile_state" == complete ]]; then
+		if render_posix_profile write | cmp -s - "$profile_file"; then
+			say "  login:      current ($profile_file)"
+		else
+			say "  login:      stale ($profile_file) - run install.sh"
+			check_failures=$((check_failures + 1))
+		fi
+	elif [[ "$posix_profile_state" == invalid ]]; then
+		say "  login:      malformed CustomShell block ($profile_file) - fix the markers"
+		check_failures=$((check_failures + 1))
+	else
+		say "  login:      not configured ($profile_file) - run install.sh"
+		check_failures=$((check_failures + 1))
+	fi
+
+	local customshell_login_env="${HOME:?HOME is not set}/.config/customshell/env.sh"
+	if [[ -r "$customshell_login_env" ]]; then
+		say "  login env:  published ($customshell_login_env)"
+	else
+		say "  login env:  not generated yet (runtime startup publishes it)"
+	fi
+
 	if ! customshell_shims_check; then
 		check_failures=$((check_failures + 1))
 	fi

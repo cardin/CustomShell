@@ -65,8 +65,9 @@ member validation and for generating the `Protect-Tar` entry list.
 - Persistent environment values are installer-owned on both platforms and always
   win over conflicts. Windows writes the User scope; Linux exports them from the
   managed profile block and runtime startup publishes them for the systemd user
-  session. Setup records what it set so uninstall can reverse it, and profile
-  startup never sets these values.
+  session and for POSIX login shells (`~/.config/customshell/env.sh`, sourced by
+  the managed `~/.profile` block). Setup records what it set so uninstall can
+  reverse it, and profile startup never sets these values.
 - Clink is the one integration referenced by repository path: setup configures it
   through the Clink CLI, follows the selected prompt, and restores prior
   settings on uninstall.

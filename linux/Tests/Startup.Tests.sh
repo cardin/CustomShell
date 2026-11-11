@@ -33,6 +33,7 @@ HOME="$test_root/home" USER=cardi-test PATH="$test_root/bin:$PATH" \
 	bash -u -c '
         source "$1"
         env_inode=$(stat -c %i "$HOME/.config/environment.d/90-customshell.conf")
+        shell_env_inode=$(stat -c %i "$HOME/.config/customshell/env.sh")
         source "$1"
         declare -F Protect-Tar >/dev/null
         declare -F Unprotect-Tar >/dev/null
@@ -43,6 +44,8 @@ HOME="$test_root/home" USER=cardi-test PATH="$test_root/bin:$PATH" \
         [[ "$TMOUT" == -1 ]]
         [[ -f "$HOME/.config/environment.d/90-customshell.conf" ]]
         [[ "$(stat -c %i "$HOME/.config/environment.d/90-customshell.conf")" == "$env_inode" ]]
+        [[ -f "$HOME/.config/customshell/env.sh" ]]
+        [[ "$(stat -c %i "$HOME/.config/customshell/env.sh")" == "$shell_env_inode" ]]
         [[ -f "$HOME/.cache/customshell/ssh-agent.env" ]]
         [[ -n "$SSH_AUTH_SOCK" ]]
         [[ "$(wc -l <"$HOME/agent-starts")" == 1 ]]
