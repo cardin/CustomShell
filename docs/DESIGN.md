@@ -49,6 +49,11 @@ member validation and for generating the `Protect-Tar` entry list.
   It locates `cmd.exe` even when `/etc/environment` has replaced the WSL `PATH`
   that would include the Windows directories, falling back to the mounted
   Windows system drive. An existing `BROWSER` value is never overwritten.
+- On WSL, startup also supplies `USERPROFILE` when it is absent, translating
+  the Windows path through `cmd.exe` and `wslpath`. `WSLENV=USERPROFILE/up`
+  only reaches processes that `wsl.exe` starts, so shells from sshd, `su -`, or
+  a systemd service would otherwise run without it. The startup warning stays
+  for hosts with no Windows command access.
 
 ## Setup and upgrades
 

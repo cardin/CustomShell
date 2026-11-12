@@ -6,7 +6,9 @@ One-way mirror of the Windows SSH directory into WSL.
 - The destination is replaced wholesale. Stale entries are removed. There is
   no merge mode.
 - Requires WSL with `rsync` and `realpath` installed, and `USERPROFILE` set.
-  The source must already exist.
+  Startup derives `USERPROFILE` through `cmd.exe` when it is absent and the
+  Windows command is reachable; otherwise export it first. The source must
+  already exist.
 
 ## Safety
 

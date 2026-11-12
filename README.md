@@ -56,7 +56,9 @@ configuration but not the persistent environment values:
 
 On WSL, startup also defaults `BROWSER` to a wrapper that opens links (for
 example `npm login`) in the default Windows browser; an existing `BROWSER`
-value is kept.
+value is kept. It likewise derives `USERPROFILE` through `cmd.exe` when a
+launcher such as an SSH session bypassed `wsl.exe`, since `WSLENV` alone does
+not reach those shells.
 
 ## Commands
 

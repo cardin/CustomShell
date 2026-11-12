@@ -3,11 +3,6 @@
 # Defines WSL-only interoperability and maintenance commands. This file is
 # sourced only after WSL detection and color initialization.
 
-if [[ -z ${USERPROFILE+x} ]]; then
-    echo -e "${Blue}Need to share WSL variable \$USERPROFILE!"
-    echo -e "${Blue}Ignore this error if you're using \"su -\". Next time, use \"su root\"."
-fi
-
 # Use VS Code (Windows) as the default editor inside WSL so it opens in the
 # Windows-side GUI. Only set here because this file is sourced only on WSL.
 if command -v code >/dev/null 2>&1; then
@@ -32,14 +27,40 @@ else
         fi
     done
 fi
+# A path with quotes or a newline cannot be embedded in the generated wrapper
+# or handed to the interpreter safely.
+customshell_cmd_usable=false
+if [[ -n "$customshell_cmd_exe" && "$customshell_cmd_exe" != *'"'* &&
+    "$customshell_cmd_exe" != *"'"* && "$customshell_cmd_exe" != *$'\n'* ]]; then
+    customshell_cmd_usable=true
+fi
+
+# WSLENV=USERPROFILE/up (set by Windows setup) hands the translated Windows
+# profile path only to processes launched by wsl.exe. sshd, `su -`, and systemd
+# services start Bash directly, so derive the same value through cmd.exe there
+# rather than leaving the WSL helpers and the SSH mirror without it.
+if [[ -z ${USERPROFILE:-} && "$customshell_cmd_usable" == true ]] &&
+    command -v wslpath >/dev/null 2>&1; then
+    customshell_windows_profile="$("$customshell_cmd_exe" /c 'echo %USERPROFILE%' 2>/dev/null | tr -d '\r')"
+    if [[ -n "$customshell_windows_profile" ]]; then
+        customshell_translated_profile="$(wslpath -u "$customshell_windows_profile" 2>/dev/null)" ||
+            customshell_translated_profile=""
+        if [[ -n "$customshell_translated_profile" ]]; then
+            export USERPROFILE="$customshell_translated_profile"
+        fi
+    fi
+fi
+
+if [[ -z ${USERPROFILE:-} ]]; then
+    echo -e "${Blue}Need to share WSL variable \$USERPROFILE!"
+    echo -e "${Blue}Ignore this error if you're using \"su -\". Next time, use \"su root\"."
+fi
 
 # Open links with the default Windows browser on any WSL device so tools such
 # as `npm login` use the Windows-side GUI instead of requiring a Linux browser.
 # sensible-browser evals $BROWSER, so export a generated space-free wrapper
 # that hands URLs to the Windows default browser through cmd.exe.
-if [[ -z ${BROWSER:-} && -n "$customshell_cmd_exe" &&
-    "$customshell_cmd_exe" != *'"'* && "$customshell_cmd_exe" != *"'"* &&
-    "$customshell_cmd_exe" != *$'\n'* ]]; then
+if [[ -z ${BROWSER:-} && "$customshell_cmd_usable" == true ]]; then
     customshell_wrapper="${HOME:?HOME is not set}/.cache/customshell/windows-browser"
     customshell_wrapper_content="$(printf '#!/bin/sh\n# Open files or URLs with the default Windows browser from WSL.\n# CustomShell maintains this wrapper; see linux/platform/wsl.sh.\nexec "%s" /C start "" "$@"\n' "$customshell_cmd_exe")"
     if [[ ! -f "$customshell_wrapper" ||
@@ -53,6 +74,7 @@ if [[ -z ${BROWSER:-} && -n "$customshell_cmd_exe" &&
     [[ -x "$customshell_wrapper" ]] && export BROWSER="$customshell_wrapper"
 fi
 unset customshell_cmd_exe customshell_candidate customshell_windows_mount
+unset customshell_cmd_usable customshell_windows_profile customshell_translated_profile
 unset customshell_wrapper customshell_wrapper_content
 
 # wcd
