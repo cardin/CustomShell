@@ -21,9 +21,6 @@ member validation and for generating the `Protect-Tar` entry list.
   interactive contexts and remains suppressed in embedded or nested sessions.
 - Prompt engines initialize before zoxide so its directory-tracking hook wraps
   the final prompt function and remains active.
-- WSL sessions keep the glyph prompt themes because the attached terminal is a
-  Windows-side one, even when the session was not launched by `wsl.exe` (SSH or
-  `su -`). The ASCII fallback is reserved for bare native-Linux sessions.
 - Bash initializes Oh My Posh with `--strict`, keeping the executable a `PATH`
   lookup instead of a resolved versioned path. This stops an in-place
   linuxbrew/Homebrew upgrade from deleting the binary a running prompt still
@@ -52,11 +49,11 @@ member validation and for generating the `Protect-Tar` entry list.
   It locates `cmd.exe` even when `/etc/environment` has replaced the WSL `PATH`
   that would include the Windows directories, falling back to the mounted
   Windows system drive. An existing `BROWSER` value is never overwritten.
-- `USERPROFILE` normally arrives already translated to a Linux path because
-  `wsl.exe` shares it through `WSLENV`, but sessions started by `sshd` or
-  `su -` never inherit that translation. WSL startup recovers the value through
-  Windows interop and converts it with `wslpath`, so WSL-only helpers such as
-  `mirror-win-ssh` keep working; it warns only when neither path yields one.
+- On WSL, startup also supplies `USERPROFILE` when it is absent, translating
+  the Windows path through `cmd.exe` and `wslpath`. `WSLENV=USERPROFILE/up`
+  only reaches processes that `wsl.exe` starts, so shells from sshd, `su -`, or
+  a systemd service would otherwise run without it. The startup warning stays
+  for hosts with no Windows command access.
 
 ## Setup and upgrades
 
@@ -73,8 +70,9 @@ member validation and for generating the `Protect-Tar` entry list.
 - Persistent environment values are installer-owned on both platforms and always
   win over conflicts. Windows writes the User scope; Linux exports them from the
   managed profile block and runtime startup publishes them for the systemd user
-  session. Setup records what it set so uninstall can reverse it, and profile
-  startup never sets these values.
+  session and for POSIX login shells (`~/.config/customshell/env.sh`, sourced by
+  the managed `~/.profile` block). Setup records what it set so uninstall can
+  reverse it, and profile startup never sets these values.
 - Clink is the one integration referenced by repository path: setup configures it
   through the Clink CLI, follows the selected prompt, and restores prior
   settings on uninstall.

@@ -5,11 +5,10 @@ One-way mirror of the Windows SSH directory into WSL.
 - Source is `$USERPROFILE/.ssh`. Destination is `$HOME/.ssh`.
 - The destination is replaced wholesale. Stale entries are removed. There is
   no merge mode.
-- Requires WSL with `rsync` and `realpath` installed. The source must already
-  exist.
-- `USERPROFILE` comes from the environment. When a session did not inherit it
-  (SSH or `su -`), startup recovers it through Windows interop; the command
-  fails only when neither path yields a value.
+- Requires WSL with `rsync` and `realpath` installed, and `USERPROFILE` set.
+  Startup derives `USERPROFILE` through `cmd.exe` when it is absent and the
+  Windows command is reachable; otherwise export it first. The source must
+  already exist.
 
 ## Safety
 

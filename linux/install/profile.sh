@@ -185,3 +185,169 @@ remove_profile_block() {
 	say "Error: failed to update $bashrc" >&2
 	return 1
 }
+
+# posix_profile_block_state
+# Prints "complete", "none", or "invalid" for the managed POSIX login block.
+posix_profile_block_state() {
+	[[ -f "$profile_file" ]] || {
+		printf 'none'
+		return 0
+	}
+	local -a lines=()
+	mapfile -t lines <"$profile_file"
+	local begins=0 ends=0 first_begin=-1 first_end=-1 i
+	for ((i = 0; i < ${#lines[@]}; i++)); do
+		if [[ "${lines[i]}" == "$profile_marker_begin" ]]; then
+			begins=$((begins + 1))
+			((first_begin < 0)) && first_begin=$i
+		elif [[ "${lines[i]}" == "$profile_marker_end" ]]; then
+			ends=$((ends + 1))
+			((first_end < 0)) && first_end=$i
+		fi
+	done
+	if ((begins == 0 && ends == 0)); then
+		printf 'none'
+	elif ((begins == 1 && ends == 1 && first_begin < first_end)); then
+		printf 'complete'
+	else
+		printf 'invalid'
+	fi
+}
+
+# posix_profile_has_block
+# Succeeds when the POSIX login profile contains a complete managed block.
+posix_profile_has_block() {
+	[[ "$(posix_profile_block_state)" == complete ]]
+}
+
+# write_posix_block_lines
+# Prints the marker-delimited POSIX login block.
+write_posix_block_lines() {
+	printf '%s\n' "$profile_marker_begin"
+	printf '%s\n' "${desired_posix_block_lines[@]}"
+	printf '%s\n' "$profile_marker_end"
+}
+
+# render_posix_profile
+# Writes the desired POSIX login profile content to stdout. A managed block is
+# replaced in place, prepended when absent, or removed on "remove".
+render_posix_profile() {
+	local action=$1
+	local -a lines=()
+	if [[ -f "$profile_file" ]]; then
+		mapfile -t lines <"$profile_file"
+	fi
+
+	local start=-1 end=-1 i
+	for ((i = 0; i < ${#lines[@]}; i++)); do
+		if ((start < 0)) && [[ "${lines[i]}" == "$profile_marker_begin" ]]; then
+			start=$i
+			continue
+		fi
+		if ((start >= 0)) && [[ "${lines[i]}" == "$profile_marker_end" ]]; then
+			end=$i
+			break
+		fi
+	done
+
+	if ((start >= 0 && end >= 0)); then
+		for ((i = 0; i < start; i++)); do
+			printf '%s\n' "${lines[i]}"
+		done
+		if [[ "$action" == "write" ]]; then
+			write_posix_block_lines
+		fi
+		local after=$((end + 1))
+		if [[ "$action" == "remove" ]] && ((after < ${#lines[@]})) && [[ -z "${lines[after]}" ]]; then
+			after=$((after + 1))
+		fi
+		for ((i = after; i < ${#lines[@]}; i++)); do
+			printf '%s\n' "${lines[i]}"
+		done
+	elif [[ "$action" == "write" ]]; then
+		write_posix_block_lines
+		if ((${#lines[@]} > 0)); then
+			printf '\n'
+			printf '%s\n' "${lines[@]}"
+		fi
+	elif ((${#lines[@]} > 0)); then
+		printf '%s\n' "${lines[@]}"
+	fi
+}
+
+# write_posix_profile_block
+# Adds or refreshes the managed POSIX login block atomically. The block is
+# prepended so it runs before Bash-specific profile initialization.
+write_posix_profile_block() {
+	local state
+	state="$(posix_profile_block_state)"
+	if [[ "$state" == invalid ]]; then
+		say "Error: $profile_file has a malformed CustomShell block (duplicated or unbalanced markers); refusing to modify it." >&2
+		return 1
+	fi
+
+	local profile_dir tmp
+	profile_dir="$(dirname -- "$profile_file")"
+	if ! mkdir -p -- "$profile_dir"; then
+		say "Error: failed to create $profile_dir" >&2
+		return 1
+	fi
+
+	tmp="$(mktemp "$profile_dir/.customshell.profile.XXXXXX")" || return 1
+	if [[ -f "$profile_file" ]]; then
+		chmod --reference="$profile_file" "$tmp" 2>/dev/null || true
+	fi
+
+	if ! render_posix_profile write >"$tmp"; then
+		rm -f -- "$tmp"
+		say "Error: failed to render the POSIX login profile block." >&2
+		return 1
+	fi
+
+	if [[ -f "$profile_file" ]] && cmp -s -- "$tmp" "$profile_file"; then
+		rm -f -- "$tmp"
+		return 0
+	fi
+
+	if [[ "$dry_run" == true ]]; then
+		rm -f -- "$tmp"
+		say "Would update POSIX login profile block in $profile_file"
+		return 0
+	fi
+
+	if mv -f -- "$tmp" "$profile_file"; then
+		say "Updated POSIX login profile block in $profile_file"
+		return 0
+	fi
+
+	rm -f -- "$tmp"
+	say "Error: failed to write $profile_file" >&2
+	return 1
+}
+
+# remove_posix_profile_block
+# Removes the POSIX login block when present.
+remove_posix_profile_block() {
+	if [[ "$(posix_profile_block_state)" == invalid ]]; then
+		say "Error: $profile_file has a malformed CustomShell block (duplicated or unbalanced markers); refusing to modify it." >&2
+		return 1
+	fi
+	if ! posix_profile_has_block; then
+		return 0
+	fi
+	if [[ "$dry_run" == true ]]; then
+		say "Would remove POSIX login profile block from $profile_file"
+		return 0
+	fi
+
+	local tmp
+	tmp="$(mktemp "$(dirname -- "$profile_file")/.customshell.profile.XXXXXX")" || return 1
+	chmod --reference="$profile_file" "$tmp" 2>/dev/null || true
+	if render_posix_profile remove >"$tmp" && mv -f -- "$tmp" "$profile_file"; then
+		say "Removed POSIX login profile block from $profile_file"
+		return 0
+	fi
+	rm -f -- "$tmp"
+	say "Error: failed to write $profile_file" >&2
+	return 1
+}

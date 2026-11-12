@@ -20,17 +20,17 @@ cat >"$test_root/bin/cmd.exe" <<'EOF'
 #!/usr/bin/env bash
 if [[ ${1:-} == /C && ${2:-} == start ]]; then
     printf 'FAKE-CMD %s\n' "${*:4}"
-elif [[ ${1:-} == /C && ${2:-} == 'echo %USERPROFILE%' ]]; then
-    printf '%s\n' "${FAKE_WIN_PROFILE:-}"
+elif [[ ${1:-} == /c && ${2:-} == *USERPROFILE* ]]; then
+    printf 'C:\\Users\\test\r\n'
 fi
 exit 0
 EOF
 cat >"$test_root/bin/wslpath" <<'EOF'
 #!/usr/bin/env bash
-# Stands in for wslpath -u so the interop fallback is testable off WSL.
-[[ ${1:-} == -u && -n ${2:-} ]] || exit 1
-[[ -n ${FAKE_WSLPATH_RESULT:-} ]] || exit 1
-printf '%s\n' "$FAKE_WSLPATH_RESULT"
+case "${2:-}" in
+    'C:\Users\test') printf '/mnt/c/Users/test\n' ;;
+    *) printf '%s\n' "${2:-}" ;;
+esac
 EOF
 printf '#!/usr/bin/env bash\nexit 0\n' >"$test_root/bin/code"
 cat >"$test_root/bin/rsync" <<'EOF'
@@ -38,36 +38,8 @@ cat >"$test_root/bin/rsync" <<'EOF'
 [[ ${RSYNC_FAIL:-false} == true ]] && exit 1
 cp -a -- "$2/." "$3/"
 EOF
-chmod +x "$test_root/bin/code" "$test_root/bin/cmd.exe" \
-    "$test_root/bin/wslpath" "$test_root/bin/rsync"
-
-# USERPROFILE recovery: sshd and "su -" sessions do not inherit the value that
-# wsl.exe translates through WSLENV, so startup recovers it through interop.
-FAKE_WIN_PROFILE='C:\Users\Test User' FAKE_WSLPATH_RESULT="$test_root/windows" \
-    Blue="" HOME="$test_root/home" PATH="$test_root/bin:$PATH" bash -u -c '
-    unset USERPROFILE
-    source "$1" >"$2" 2>&1
-    [[ "$USERPROFILE" == "$FAKE_WSLPATH_RESULT" ]] || exit 2
-    [[ ! -s "$2" ]] || exit 3
-' bash "$(dirname "${BASH_SOURCE[0]}")/../platform/wsl.sh" "$test_root/recovery.out" ||
-    fail "USERPROFILE was not recovered through interop"
-
-FAKE_WIN_PROFILE='' FAKE_WSLPATH_RESULT="$test_root/windows" \
-    Blue="" HOME="$test_root/home" PATH="$test_root/bin:$PATH" bash -u -c '
-    unset USERPROFILE
-    source "$1" >"$2" 2>&1
-    [[ -z ${USERPROFILE:-} ]] || exit 2
-    grep -q "Need to share WSL variable" "$2" || exit 3
-' bash "$(dirname "${BASH_SOURCE[0]}")/../platform/wsl.sh" "$test_root/recovery.out" ||
-    fail "missing USERPROFILE did not warn after a failed recovery"
-
-FAKE_WIN_PROFILE='C:\Other' FAKE_WSLPATH_RESULT="$test_root/windows" \
-    Blue="" HOME="$test_root/home" PATH="$test_root/bin:$PATH" \
-    USERPROFILE="$test_root/windows" bash -u -c '
-    source "$1" >/dev/null 2>&1
-    [[ "$USERPROFILE" == "$2" ]] || exit 2
-' bash "$(dirname "${BASH_SOURCE[0]}")/../platform/wsl.sh" "$test_root/windows" ||
-    fail "existing USERPROFILE was overwritten"
+chmod +x "$test_root/bin/code" "$test_root/bin/cmd.exe" "$test_root/bin/wslpath" \
+    "$test_root/bin/rsync"
 
 echo "old" >"$test_root/home/.ssh/old-key"
 echo "new" >"$test_root/windows/.ssh/new-key"
@@ -96,6 +68,33 @@ RSYNC_FAIL=true mirror-win-ssh >/dev/null 2>&1 &&
 
 USERPROFILE="" mirror-win-ssh >/dev/null 2>&1 &&
     fail "mirror-win-ssh accepted an empty USERPROFILE"
+
+# USERPROFILE derivation: WSLENV only reaches shells that wsl.exe starts, so
+# startup derives the translated Windows profile path through cmd.exe when the
+# variable is absent, as in sshd, `su -`, and systemd service sessions.
+profile_root="$test_root/profile"
+mkdir -p "$profile_root/home" "$profile_root/empty"
+
+Blue="" HOME="$profile_root/home" PATH="$test_root/bin:$PATH" \
+    bash -u -c '
+    unset USERPROFILE
+    source "$1" >"$HOME/derived.out"
+    [[ "${USERPROFILE:-}" == /mnt/c/Users/test ]] || exit 2
+    grep -q "Need to share WSL variable" "$HOME/derived.out" && exit 3
+    exit 0
+' bash "$(dirname "${BASH_SOURCE[0]}")/../platform/wsl.sh" ||
+    fail "USERPROFILE was not derived through cmd.exe"
+
+# Without Windows command access the variable stays unset and the warning shows.
+Blue="" HOME="$profile_root/home" PATH="/usr/bin:/bin" \
+    CUSTOMSHELL_WINDOWS_MOUNT="$profile_root/empty" \
+    bash -u -c '
+    unset USERPROFILE BROWSER
+    source "$1" >"$HOME/no-cmd.out"
+    [[ -z "${USERPROFILE:-}" ]] || exit 2
+    grep -q "Need to share WSL variable" "$HOME/no-cmd.out" || exit 3
+' bash "$(dirname "${BASH_SOURCE[0]}")/../platform/wsl.sh" ||
+    fail "USERPROFILE was set without Windows command access"
 
 # BROWSER setup: every WSL session gets a wrapper that hands links to the
 # default Windows browser through cmd.exe; preexisting values are left alone.

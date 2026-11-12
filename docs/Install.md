@@ -18,8 +18,12 @@ bash <repo>/linux/install.sh
 
 - Adds a marker-delimited block to the shell profile that sources the entry
   point (`pwsh/main.ps1` or `linux/main.sh`). On Windows the block is written to
-  the current user's all-hosts profile (`profile.ps1`). A stale block is updated
-  in place; an unmarked manual `source` line is reported and left untouched.
+  the current user's all-hosts profile (`profile.ps1`). On Linux and WSL a
+  second managed block in `~/.profile` sources the runtime-generated
+  `~/.config/customshell/env.sh` for POSIX login shells (`sh -lc`) and Bash
+  login shells, whose startup does not reach CustomShell's interactive
+  `.bashrc` block. A stale block is updated in place; an unmarked manual
+  `source` line is reported and left untouched.
 - Persists the environment values listed under
   [Persistent environment](#persistent-environment).
 - Installs or registers shared tool configuration:
@@ -47,8 +51,9 @@ bash <repo>/linux/install.sh
   profile startup does not enumerate commands.
 
 All other startup behavior remains runtime-managed: PATH, aliases, prompt
-initialization, the SSH agent, and the generated `environment.d` file are
-handled by startup code and are never modified here.
+initialization, the SSH agent, and the generated `environment.d` and
+`customshell/env.sh` files are handled by startup code and are never modified
+here.
 
 ## What it does not do
 
@@ -57,7 +62,8 @@ handled by startup code and are never modified here.
   are copied so no elevation is required.
 - No changes to secrets, SSH data, or CA certificates. Git credential-helper
   configuration is the only Git state changed. The installer never writes
-  `environment.d` directly; runtime startup publishes the managed values.
+  `environment.d` or `customshell/env.sh` directly; runtime startup publishes the
+  managed values.
 
 ## Persistent environment
 
@@ -72,9 +78,10 @@ unless noted):
   profile block and publishes it to
   `~/.config/environment.d/90-customshell.conf` for the systemd user session.
 - `WSLENV=USERPROFILE/up` — share the Windows user-profile path with WSL,
-  translating the path and applying only from Windows to WSL. Sessions that do
-  not inherit it, such as SSH or `su -`, have WSL startup recover the value
-  through Windows interop.
+  translating the path and applying only from Windows to WSL. Shells that
+  `wsl.exe` did not start (sshd, `su -`, systemd services) are outside that
+  translation; Linux startup derives the same path through `cmd.exe` and
+  `wslpath` when Windows command access is available.
 - `CONDA_PATH=<directory containing conda.exe>` — set when conda is found on
   `PATH`, so profile startup can lazily initialize conda. It is not set when
   conda is absent, and an existing valid value is respected and left unmanaged.
@@ -93,6 +100,12 @@ successful install. `CONDA_PATH` is recorded only when setup set it, and
 `-EnvironmentScope Process` applies changes to the current process only and
 exists so tests never touch the registry.
 
+On Linux and WSL, runtime startup also writes a safely shell-quoted copy to
+`~/.config/customshell/env.sh`. The managed `~/.profile` block sources it, so
+POSIX login shells (`sh -lc`) and Bash login shells see the certificate and tool
+values at exec without starting an interactive Bash. The artifact is written
+only from values that are present and valid; a missing artifact is a no-op.
+
 Processes already running before setup keep their old environment block, so a
 new session may not see new values until the environment refreshes (sign out and
 back in, or restart the terminal host). Linux shells pick them up the next time
@@ -104,8 +117,9 @@ they start.
 --check              Report current state without changing anything.
 --dry-run            Print intended actions without changing anything.
 --uninstall          Remove the managed profile, links, Git helper, and
-                     generated environment.d file.
+                     generated environment files.
 --bashrc <path>      Override the rc file to edit.
+--profile <path>     Override the POSIX login profile to edit.
 -h, --help           Show help and exit.
 ```
 
@@ -119,9 +133,10 @@ Linux records previous global Git credential-helper values under
 only while the configured cache helper is still unchanged; a locally modified
 helper is reported and kept.
 
-`--check` exits non-zero when the profile block or Git helper are missing or
-stale, and reports the `CUSTOM_CA_CERT` prerequisite (only needed on managed
-devices). Advisories about optional commands do not affect the exit status.
+`--check` exits non-zero when the profile block, POSIX login block, or Git
+helper are missing or stale, and reports the `CUSTOM_CA_CERT` prerequisite (only
+needed on managed devices). Advisories about optional commands do not affect the
+exit status.
 
 ### tmux clipboard compatibility
 
@@ -197,11 +212,6 @@ The prompt is selected by `pwsh/Settings.psd1` (PowerShell) or `PRETTY_PROMPT`
 and `config/starship/`. Starship is pointed at the repository theme through
 `STARSHIP_CONFIG`, choosing `catppuccin-powerline.toml` for standalone terminals
 and `plain-text-symbols.toml` otherwise.
-
-WSL always uses the glyph themes: `catppuccin_gruvbox` for Oh My Posh and
-`catppuccin-powerline.toml` for Starship, including sessions started by SSH or
-`su -` that were not launched by `wsl.exe`. Only bare native-Linux sessions fall
-back to `ascii` and `plain-text-symbols.toml`.
 
 ## Espanso layout
 
