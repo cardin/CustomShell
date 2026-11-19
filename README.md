@@ -3,86 +3,35 @@
 Personal PowerShell and Bash configuration for a consistent prompt, aliases,
 and optional tool integrations across Windows, Linux, and WSL.
 
-- [Install.md](docs/Install.md) — setup, upgrade, options, and environment values.
-- [DESIGN.md](docs/DESIGN.md) — runtime and setup principles.
+## Setup
 
-## Windows
-
-Clone into `~/Documents` and run the setup script:
+Windows, cloned into `~/Documents`:
 
 ```ps1
 git clone https://github.com/cardin/CustomShell "$env:USERPROFILE\Documents\CustomShell"
 & "$env:USERPROFILE\Documents\CustomShell\pwsh\Install.ps1"
 ```
 
-Setup wires the all-hosts profile, persists environment values, and installs or
-registers the shared tool configuration. It is safe to re-run and supports
-`-Check`, `-DryRun`, and `-Uninstall`. The prompt and the expected-command list
-are configured in `pwsh/Settings.psd1`. See [Install.md](docs/Install.md).
-
-Manual alternative — append this to `~/Documents/PowerShell/profile.ps1` (the
-all-hosts profile, not a host-specific one). It loads the shell configuration
-but not the persistent environment values:
-
-```ps1
-. "$env:USERPROFILE\Documents\CustomShell\pwsh\main.ps1"
-```
-
-## Linux
-
-Clone into `~/.config/CustomShell` and run the setup script:
+Linux and WSL, cloned into `~/.config/CustomShell`:
 
 ```sh
 git clone https://github.com/cardin/CustomShell ~/.config/CustomShell
 bash ~/.config/CustomShell/linux/install.sh
 ```
 
-Or download the tree directly:
+Setup is idempotent and safe to re-run. It supports `-Check`/`--check`,
+`-DryRun`/`--dry-run`, and `-Uninstall`/`--uninstall`. Options, persistent
+environment values, and platform details are in
+[Install.md](docs/reference/Install.md).
 
-```sh
-curl -L https://github.com/cardin/CustomShell/archive/refs/heads/master.tar.gz | tar xz --strip 1
-```
+## Documentation
 
-Setup wires `~/.bashrc`, persists environment values, and installs or links the
-shared tool configuration. It is safe to re-run and supports `--check`,
-`--dry-run`, and `--uninstall`. See [Install.md](docs/Install.md).
+- [Requirements](docs/REQUIREMENTS.md) — required behavior and constraints.
+- [Design](docs/DESIGN.md) — runtime and setup principles.
+- [Interfaces](docs/INTERFACES.md) — commands, settings, and state-file contracts.
+- [Test plan](docs/TESTPLAN.md) — verification mapping and known gaps.
+- [Decisions](docs/ADR.md) — accepted architecture decisions.
+- [Reference](docs/reference/README.md) — installation, archives, and SSH mirror.
+- [Contributor and coding-agent guidance](AGENTS.md) — validation commands and change workflow.
 
-Manual alternative — append this to `~/.bashrc`. It loads the shell
-configuration but not the persistent environment values:
-
-```sh
-. ~/.config/CustomShell/linux/main.sh
-```
-
-On WSL, startup also defaults `BROWSER` to a wrapper that opens links (for
-example `npm login`) in the default Windows browser; an existing `BROWSER`
-value is kept. It likewise derives `USERPROFILE` through `cmd.exe` when a
-launcher such as an SSH session bypassed `wsl.exe`, since `WSLENV` alone does
-not reach those shells.
-
-## Commands
-
-- `Show-Help` displays the compact CustomShell command reference in both shells.
-- `Protect-Tar` and `Unprotect-Tar` create and extract encrypted archives. See [Protect-Tar.md](docs/Protect-Tar.md).
-  `Protect-Tar` uses recursive `.gitignore` rules, including for tracked files.
-  Directory archiving requires Git unless `--no-ignore` is passed.
-  Explicit `--exclude` rules still apply.
-- `mirror-win-ssh` mirrors the Windows SSH directory into WSL. See [Mirror-Win-Ssh.md](docs/Mirror-Win-Ssh.md).
-- PowerShell also provides `Get-SSHConfig` for reading SSH host aliases.
-- Commands listed in `WslCommands` (`pwsh/Settings.psd1`) are exposed as
-  PowerShell commands that run inside the default WSL distribution when no
-  native command exists. Currently `opencode`.
-
-## PowerShell tests
-
-The PowerShell regression tests require Pester 5.0 or newer, Git, `tar.exe`, and
-Python 3.8 or newer (`python3` or `python`) in `PATH`:
-
-```ps1
-Invoke-Pester ./pwsh/Tests
-```
-
-## Project documentation
-
-- [Specification](docs/)
-- [Contributor and coding-agent guidance](AGENTS.md)
+`Show-Help` lists the interactive commands in either shell.

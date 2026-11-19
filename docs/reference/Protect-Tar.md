@@ -120,7 +120,10 @@ Windows
 ## Extraction and collisions
 
 - `destination` is a container directory and defaults to the current directory.
-  The destination directory itself is never renamed or replaced.
+  The destination directory itself is never renamed or replaced. Filesystem
+  roots, the home directory, and the CustomShell repository root are refused,
+  as are symbolic-link destinations and destinations whose parent does not
+  exist.
 - The archive is authenticated, decrypted, validated, and extracted in private
   staging locations before destination content changes.
 - If the top-level item already exists, an interactive terminal prompts once
@@ -133,22 +136,19 @@ Windows
 
 ## Progress reporting
 
-Interactive sessions provide stage indicators and live percentage updates:
+Interactive sessions report operation progress. Progress UI is suppressed in
+non-interactive and redirected sessions, keeping logs and pipes clean.
 
-- **Stage tracking:** Both commands display four progress stages (validation,
-  packaging/extraction, encryption/decryption with `age`, and finalization).
-- **Tar percentage progress:** During tar creation and extraction, progress is
-  updated in place with a percentage and processed-item counter.
-- **Terminal isolation:** Progress output is suppressed in non-interactive and
-  redirected sessions, keeping logs and pipes clean.
+Stage labels, stage counts, counters, and percentage displays are presentation
+details, not command-contract requirements.
 
 ## Failure safety
 
 - Before publication begins, errors leave existing output and destination data
   unchanged and remove temporary plaintext and encrypted data.
-- Publication journals every affected item and rolls changes back in reverse
-  order if a handled error occurs. Empty parent directories created by the
-  command are removed after failure.
+- Handled publication errors roll back changes and restore prior destination
+  data. Empty parent directories created by the command are removed after
+  failure.
 - If automatic rollback cannot complete, original data is retained in a
   permission-restricted recovery directory and its path is reported clearly.
 - Cleanup failure is reported and must not be described as a clean success.

@@ -12,6 +12,7 @@ One-way mirror of the Windows SSH directory into WSL.
 
 ## Safety
 
+- Refuses an unset `USERPROFILE` or a missing or invalid source directory.
 - Refuses unsafe paths: filesystem root, or source and destination identical.
 - Refuses symbolic links for source, destination, and anything inside source.
 - Refuses hard-linked files inside source.

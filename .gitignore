@@ -1,4 +1,5 @@
-.codebase-index
-.vscode
 __pycache__/
+.ruff_cache/
+.vscode/
+.codebase-index
 *.pyc

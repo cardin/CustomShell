@@ -211,7 +211,8 @@ The prompt is selected by `pwsh/Settings.psd1` (PowerShell) or `PRETTY_PROMPT`
 (Bash). Oh My Posh and Starship read their themes directly from `config/omp/`
 and `config/starship/`. Starship is pointed at the repository theme through
 `STARSHIP_CONFIG`, choosing `catppuccin-powerline.toml` for standalone terminals
-and `plain-text-symbols.toml` otherwise.
+and `plain-text-symbols.toml` otherwise. Bash keeps glyph themes in bare WSL
+sessions and uses plain-text themes in bare native Linux sessions.
 
 ## Espanso layout
 

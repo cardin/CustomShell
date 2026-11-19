@@ -1,96 +1,182 @@
-# CustomShell design
+# CustomShell call flows
 
-## Purpose
+These diagrams show selected calls and dependencies in the current code.
+For behaviour and options, see [requirements](REQUIREMENTS.md) and
+[command contracts](INTERFACES.md).
 
-CustomShell provides consistent interactive shell behavior across PowerShell
-on Windows and Bash on Linux/WSL. Windows 11 with PowerShell 7 and Ubuntu-like
-Linux or WSL2 are the primary environments.
+## Bash startup
 
-Startup entry points compose small platform-specific files. Reusable PowerShell
-commands live in an import-safe module; importing it must not run profile setup
-or change external configuration. Shared tool configuration lives under
-`config/`. Cross-platform helper code used by both shells lives under `tools/`;
-the archive commands share `tools/archive_core.py` for path, portability, and
-member validation and for generating the `Protect-Tar` entry list.
+```mermaid
+sequenceDiagram
+    participant Shell as Bash profile
+    participant Main as linux/main.sh
+    participant Modules as Sourced scripts in the same shell
+    participant Files as User environment files
+    Shell->>Main: source from managed .bashrc block
+    Main->>Modules: core/context.sh, then core/paths.sh
+    Main->>Modules: ui/colors.sh and commands/{archive,certificates,utilities}.sh
+    opt IS_WSL
+        Main->>Modules: platform/wsl.sh
+    end
+    Main->>Modules: startup/certificates.sh, then integrations/tools.sh (zoxide)
+    opt Interactive Bash
+        Main->>Modules: integrations/prompt.sh, then bind config/inputrc
+    end
+    Main->>Modules: startup/ssh-agent.sh, then startup/environment-d.sh
+    Modules->>Files: customshell_publish_lines writes environment.d and env.sh
+    Main->>Modules: startup/terminal.sh, then ui/diagnostics.sh
+    opt Interactive, outside tmux, non-dumb TERM, not suppressed, not already shown
+        Main->>Modules: Show-Help()
+    end
+```
 
-## Runtime principles
+Sources: [entry point](../linux/main.sh#L12-L44),
+[zoxide initialization](../linux/integrations/tools.sh#L64-L74),
+[prompt initialization](../linux/integrations/prompt.sh),
+[environment publication](../linux/startup/environment-d.sh#L75-L98).
 
-- Missing optional tools must not prevent startup, and generated initialization
-  code must be successful and non-empty before execution.
-- Repeated sourcing must be safe. Startup output belongs only in appropriate
-  interactive contexts and remains suppressed in embedded or nested sessions.
-- Prompt engines initialize before zoxide so its directory-tracking hook wraps
-  the final prompt function and remains active.
-- Bash initializes Oh My Posh with `--strict`, keeping the executable a `PATH`
-  lookup instead of a resolved versioned path. This stops an in-place
-  linuxbrew/Homebrew upgrade from deleting the binary a running prompt still
-  points at.
-- Platform-specific features activate only where supported; Windows
-  interoperability helpers are limited to WSL.
-- WSL-exposed commands are declared in `pwsh/Settings.psd1` (`WslCommands`) and
-  wrapped only when no native command exists. Arguments are forwarded to an
-  interactive login Bash through `wsl -e` with CustomShell's startup output
-  suppressed, so the command resolves from the user's own environment.
-- Shared tool configuration is read from the repository at runtime where
-  possible. When a tool cannot do that, setup installs or registers the
-  configuration as described in [Install.md](Install.md).
-- The shared `config/tmux.conf` advertises the OSC 52 (`Ms`) capability on both
-  the pane and client terminfo and enables DCS passthrough, so selections made
-  by OSC 52 terminal applications such as the OpenCode TUI reach the attached
-  terminal's clipboard (on WSL, the Windows clipboard) instead of stopping in
-  tmux's own buffer. Terminals without OSC 52 support ignore the sequence, and
-  pane copies stay available in the tmux buffer regardless.
-- Linux startup may manage a reusable `ssh-agent` and regenerate CustomShell's
-  `environment.d` file. Linux setup owns its Git credential-helper setting;
-  PowerShell startup does not change global Git configuration.
-- On WSL, startup defaults `BROWSER` to a generated wrapper under
-  `~/.cache/customshell/` that hands links to the default Windows browser
-  through `cmd.exe`, so tools like `npm login` open links on the Windows side.
-  It locates `cmd.exe` even when `/etc/environment` has replaced the WSL `PATH`
-  that would include the Windows directories, falling back to the mounted
-  Windows system drive. An existing `BROWSER` value is never overwritten.
-- On WSL, startup also supplies `USERPROFILE` when it is absent, translating
-  the Windows path through `cmd.exe` and `wslpath`. `WSLENV=USERPROFILE/up`
-  only reaches processes that `wsl.exe` starts, so shells from sshd, `su -`, or
-  a systemd service would otherwise run without it. The startup warning stays
-  for hosts with no Windows command access.
+## PowerShell startup
 
-## Setup and upgrades
+```mermaid
+sequenceDiagram
+    participant Profile as CurrentUserAllHosts profile
+    participant Main as pwsh/main.ps1
+    participant Host as Settings and Win32_Process
+    participant Startup as pwsh/Startup scripts (same scope)
+    participant Commands as CustomShell.Commands module
+    Profile->>Main: dot-source
+    Main->>Host: load Settings.psd1 and inspect process ancestry
+    Main->>Startup: dot-source Set-InteractiveAliases.ps1
+    Main->>Startup: dot-source Initialize-Integrations.ps1 and Initialize-PSReadLine.ps1
+    Main->>Startup: dot-source Initialize-Prompt.ps1, then Initialize-Zoxide.ps1
+    Main->>Startup: dot-source Show-StartupStatus.ps1
+    opt Standalone terminal
+        Startup->>Startup: Show-Help()
+    end
+    Main->>Commands: Import-Module via manifest
+    Commands->>Commands: dot-source Archive.ps1 and Ssh.ps1, then export public functions
+```
 
-- `pwsh/Install.ps1` and `linux/install.sh` are the supported setup paths:
-  idempotent, safe to re-run, and removable via their uninstall mode. Behavior
-  lives in module files under `linux/install/` and `pwsh/Install/` so each
-  concern is independently testable, and every target is resolved from the
-  entry point's own location.
-- Setup stays declarative: it wires the profile entry point, persists the
-  environment values, and installs or registers the configuration described in
-  [Install.md](Install.md). It delegates runtime mutation to existing startup
-  code and never installs packages, escalates privileges, or modifies secrets,
-  SSH, or CA state.
-- Persistent environment values are installer-owned on both platforms and always
-  win over conflicts. Windows writes the User scope; Linux exports them from the
-  managed profile block and runtime startup publishes them for the systemd user
-  session and for POSIX login shells (`~/.config/customshell/env.sh`, sourced by
-  the managed `~/.profile` block). Setup records what it set so uninstall can
-  reverse it, and profile startup never sets these values.
-- Clink is the one integration referenced by repository path: setup configures it
-  through the Clink CLI, follows the selected prompt, and restores prior
-  settings on uninstall.
-- Setup reports unavailable expected commands on every run, so startup performs
-  no command discovery; `Show-Help` remains the startup reminder.
-- Linux setup records the previous Git credential-helper values before applying
-  its cache helper. Uninstall restores them when the managed value has not been
-  modified locally.
+The command module can also be imported without running `pwsh/main.ps1`.
+Sources: [entry point](../pwsh/main.ps1#L12-L62),
+[startup status](../pwsh/Startup/Show-StartupStatus.ps1#L28-L30),
+[command module](../pwsh/Modules/CustomShell.Commands/CustomShell.Commands.psm1).
 
-## Compatibility and safety
+## Setup and environment ownership
 
-- Public command names and startup paths are compatibility surfaces.
-- Destructive operations must resolve narrow targets and reject broad or empty
-  paths.
-- Secrets, passwords, certificates, and private key material must not be
-  printed, logged, or committed.
+```mermaid
+flowchart TD
+    subgraph W["Windows installer"]
+        WI["pwsh/Install.ps1"]
+        WI -->|install| WM["Install-ProfileBlock<br/>Install-PersistentEnvironment<br/>Install-Configs · Install-Clink"]
+        WI -->|check| WC["Invoke-Checks"]
+        WI -->|uninstall| WU["Uninstall-* counterparts"]
+    end
+    WM --> WSTATE["PowerShell profile, user environment,<br/>tool settings and install state"]
+    subgraph L["Linux installer"]
+        LI["linux/install.sh"]
+        LI -->|install| LM["write_profile_block · write_posix_profile_block<br/>customshell_shims_link · customshell_git_install"]
+        LI -->|check| LC["report_checks"]
+        LI -->|uninstall| LU["Remove hooks and shims, restore Git helper,<br/>customshell_environment_uninstall"]
+    end
+    LM --> RC[".bashrc block: export values and source linux/main.sh"]
+    LM --> LP[".profile block: source env.sh when readable"]
+    subgraph R["Linux runtime"]
+        MAIN["linux/main.sh"] -->|sources| PUB["startup/environment-d.sh"]
+    end
+    RC --> MAIN
+    PUB -->|writes| ENV["env.sh"]
+    PUB -->|writes| CONF["90-customshell.conf"]
+    LP -->|reads| ENV
+    CONF -->|read by| SYSTEMD["systemd user environment"]
+```
 
-## Known gaps
+Installers write hooks for later shells; they do not execute startup as part of
+installing. Sources: [PowerShell mode dispatch](../pwsh/Install.ps1#L94-L151),
+[Bash hook generation and mode dispatch](../linux/install.sh#L99-L147),
+[Linux runtime publisher](../linux/startup/environment-d.sh),
+[environment ownership decision](ADR.md#adr-0001-installer-owned-environment-values-runtime-publication).
 
-- Most Bash helpers beyond startup and archives lack regression coverage.
-- Device detection relies on a username heuristic.
+## Archive commands
+
+```mermaid
+flowchart TD
+    B["Bash: Protect-Tar / Unprotect-Tar<br/>linux/commands/archive.sh"]
+    P["PowerShell: Protect-Tar / Unprotect-Tar<br/>CustomShell.Commands/Archive.ps1"]
+    P --> PA["Invoke-CustomShellArchiveCore()"]
+    subgraph C["Shared Python process: tools/archive_core.py"]
+        MAIN["main()"]
+        MAIN -->|creation| CREATE["resolve_output() · list_source()"]
+        MAIN -->|extraction| CHECK["validate_destination() · validate_tar()"]
+    end
+    B -->|python3| MAIN
+    PA -->|python3 or python| MAIN
+    subgraph T["External tools"]
+        GNU["GNU tar"]
+        BSD["tar.exe"]
+        AGE["age"]
+        GIT["Git ignore matcher"]
+    end
+    B --> GNU
+    P --> BSD
+    B --> AGE
+    P --> AGE
+    CREATE -->|directory ignore rules, if enabled| GIT
+```
+
+```mermaid
+flowchart TD
+    CP["Protect-Tar"] --> CV["Validate and list source; resolve output"]
+    CV --> CT["tar packs the selected files"]
+    CT --> CE["age encrypts to a temporary output"]
+    CE --> CW["Shell publishes the archive"]
+    XP["Unprotect-Tar"] --> XV["Validate destination"]
+    XV --> XD["age decrypts and authenticates"]
+    XD --> XC["Python validates archive members"]
+    XC --> XT["tar extracts into staging"]
+    XT --> XW["Shell checks collisions and publishes or rolls back"]
+```
+
+Python owns validation and source selection. The shell front ends call
+`tar` and `age` and own staging and publication.
+Sources: [Bash front end](../linux/commands/archive.sh),
+[PowerShell front end](../pwsh/Modules/CustomShell.Commands/Archive.ps1),
+[Python dispatch](../tools/archive_core.py#L415-L493).
+
+## WSL boundary
+
+```mermaid
+flowchart TD
+    subgraph W["Windows host"]
+        PS["PowerShell alias → generated Invoke-Wsl… function"]
+        WSL["wsl -e"]
+        CMD["cmd.exe"]
+        WINSSH["Windows .ssh directory"]
+        PS -->|configured command with no native provider| WSL
+    end
+    subgraph L["WSL distribution"]
+        LOGIN["bash -lic → configured command"]
+        MAIN["linux/main.sh"]
+        MOD["platform/wsl.sh"]
+        BROWSER["Generated BROWSER wrapper"]
+        MIRROR["mirror-win-ssh()"]
+        COPY["rsync"]
+        STAGE["Staged SSH tree"]
+        DEST["WSL .ssh directory"]
+        MAIN -->|IS_WSL| MOD
+        MOD -->|writes if BROWSER is unset and cmd.exe is usable| BROWSER
+        MOD -->|defines, does not invoke| MIRROR
+        MIRROR -->|when called, after validation| COPY
+        COPY -->|writes| STAGE
+        MIRROR -->|sets modes on| STAGE
+        MIRROR -->|publishes staged tree; restores on failure| DEST
+    end
+    WSL -->|forwards arguments; suppresses Bash startup help| LOGIN
+    MOD -->|queries Windows profile if USERPROFILE is missing and tools are available| CMD
+    BROWSER -->|when invoked, opens the default Windows browser| CMD
+    WINSSH -->|read by| COPY
+```
+
+Sources: [PowerShell wrapper](../pwsh/Startup/Set-InteractiveAliases.ps1#L76-L125),
+[WSL startup helpers](../linux/platform/wsl.sh#L12-L75),
+[mirror call](../linux/platform/wsl.sh#L110-L204).
