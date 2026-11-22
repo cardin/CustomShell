@@ -159,6 +159,29 @@ Overrides accepted by setup (for tests and unusual layouts) are documented in
 
 ## Environment variables
 
+### Portable environment variables
+
+| Variable | Windows setup default | WSL and Linux |
+| --- | --- | --- |
+| `TMPDIR` | Windows temp directory (`[IO.Path]::GetTempPath()`). | Bash startup and the managed POSIX login hook export `/tmp` if unset or empty. |
+| `USER` | Windows account name (`[Environment]::UserName`). | Native login environment; CustomShell does not set it. |
+| `HOME` | Windows `USERPROFILE`, falling back to PowerShell's `$HOME`. | Native Linux home; CustomShell does not set it. WSL `USERPROFILE` still points to the Windows profile. |
+| `PROJECTS_W` | `%USERPROFILE%\projects_w`. | WSL: `$USERPROFILE/projects_w`, the Windows directory. Native Linux: unset. |
+| `PROJECTS_L` | The default WSL home's `projects_l` as a UNC path. | `$HOME/projects_l`. |
+
+Every default is derived from the running account's profile, user name, home,
+or WSL itself; no user or distribution name is hard-coded. On Windows,
+`PROJECTS_L` needs a working `wsl.exe` and remains unset otherwise.
+
+Paths are in the current OS's format. Windows setup writes a User-scoped
+default only if the name has no nonempty User, Machine, or installer-process
+value. A process-only value is not made persistent. Only defaults written by
+setup are owned; uninstall preserves preexisting or edited values. On Linux and
+WSL all defaults are session values and an existing nonempty value wins.
+Windows processes need a refreshed user environment, not a PowerShell profile.
+On Linux and WSL, processes that bypass the shell hooks do not get the
+`TMPDIR` or projects fallbacks unless they inherit them.
+
 ### Installer-owned
 
 | Variable | Platforms | Contract |

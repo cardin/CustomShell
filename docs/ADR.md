@@ -19,6 +19,7 @@ or merged; rejected drafts are removed before that. Status is `Accepted`,
 | ID | Title | Status |
 | --- | --- | --- |
 | ADR-0001 | Installer-owned environment values, runtime publication | Accepted |
+| ADR-0002 | Use native names for portable environment variables | Accepted |
 
 ## ADR-0001: Installer-owned environment values, runtime publication
 
@@ -38,3 +39,14 @@ directly. Uninstall removes only values and files it still owns.
 **Consequences.** Setup and startup have separate responsibilities that must
 not blur. Modified values and files are reported and kept rather than
 overwritten. A running process keeps its old environment until it restarts.
+
+## ADR-0002: Use native names for portable environment variables
+
+- **Status:** Accepted
+- **Date:** 2026-11-22
+
+Use the native Linux names rather than CustomShell-specific aliases so scripts
+can use the same names on Windows and WSL. Persist missing Windows values at
+setup so they reach processes that do not load PowerShell. Existing values
+take precedence over defaults, and WSL keeps its own user and home.
+See [portable environment variables](INTERFACES.md#portable-environment-variables).

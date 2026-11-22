@@ -88,7 +88,7 @@ function Invoke-Checks {
     $environmentValues = Get-PersistentEnvironment
     foreach ($name in $environmentValues.Keys) {
         $desired = $environmentValues[$name]
-        $current = [Environment]::GetEnvironmentVariable($name, $EnvironmentScope)
+        $current = Get-ScopedEnvironmentValue $name $EnvironmentScope
         if ($current -eq $desired) {
             Write-Host "  env:        ${name}=$current ($EnvironmentScope)"
             continue
@@ -103,6 +103,21 @@ function Invoke-Checks {
         }
         else {
             Write-Host "  env:        ${name}=$shown ($EnvironmentScope)"
+        }
+    }
+
+    foreach ($name in (Get-PortableEnvironmentNames)) {
+        $configured = Get-PortableEnvironmentValue $name
+        if ($configured -and ($EnvironmentScope -eq 'Process' -or $configured.Scope -ne 'Process')) {
+            Write-Host "  env:        ${name}=$($configured.Value) ($($configured.Scope))"
+        }
+        elseif ($EnvironmentScope -eq 'User') {
+            $shown = if ($configured) { 'Process only (not persistent)' } else { 'unset' }
+            Write-Host "  env:        ${name}=$shown - run Install.ps1 from a session without overrides"
+            $failures++
+        }
+        else {
+            Write-Host "  env:        ${name}=unset (Process)"
         }
     }
 

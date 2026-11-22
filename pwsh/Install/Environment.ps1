@@ -1,8 +1,8 @@
 # Persistent user environment values managed by CustomShell setup. The entry
 # point's -EnvironmentScope selects the target scope; User is the real target
 # and Process exists so tests never touch the registry. Managed values always
-# win, so an existing conflicting value is overwritten; CONDA_PATH is the
-# exception, since a user-provided valid value is respected and left unmanaged.
+# win where required; portable defaults never replace nonempty values, and a
+# user-provided valid CONDA_PATH is respected and left unmanaged.
 # A managed value that is no longer desired is cleared, so switching the
 # selected prompt away from starship removes STARSHIP_CONFIG. This file only
 # defines functions and is dot-sourced by pwsh/Install.ps1. The functions read
@@ -28,6 +28,58 @@ function Get-PersistentEnvironment {
     }
 
     return $values
+}
+
+function Get-PortableEnvironmentNames {
+    'TMPDIR', 'USER', 'HOME', 'PROJECTS_W', 'PROJECTS_L'
+}
+
+# Resolve the default WSL projects path as a Windows UNC path. The distribution
+# and Linux user come from WSL itself, so no machine-specific name is stored.
+function Get-WslProjectsPath {
+    $wsl = Get-Command wsl.exe -ErrorAction SilentlyContinue
+    if (-not $wsl) {
+        return $null
+    }
+    $path = & $wsl.Source -e sh -c 'wslpath -w "$HOME/projects_l"' 2>$null
+    if ($LASTEXITCODE -ne 0 -or -not $path) {
+        return $null
+    }
+    return ([string] $path).Trim()
+}
+
+# Resolve a default only when setup needs to fill a missing value.
+function Get-PortableEnvironmentDefault($Name) {
+    switch ($Name) {
+        'TMPDIR' { [IO.Path]::GetTempPath() }
+        'USER'   { [Environment]::UserName }
+        'HOME'   { if ($env:USERPROFILE) { $env:USERPROFILE } else { $HOME } }
+        'PROJECTS_W' {
+            $profileDir = if ($env:USERPROFILE) { $env:USERPROFILE } else { $HOME }
+            Join-Path $profileDir 'projects_w'
+        }
+        'PROJECTS_L' { Get-WslProjectsPath }
+    }
+}
+
+function Get-ScopedEnvironmentValue($Name, $Scope) {
+    [Environment]::GetEnvironmentVariable($Name, $Scope)
+}
+
+function Set-ScopedEnvironmentValue($Name, $Value, $Scope) {
+    [Environment]::SetEnvironmentVariable($Name, $Value, $Scope)
+}
+
+# Match Windows precedence for durable values. A process-only override still
+# blocks a setup write, but is not considered persistent by -Check.
+function Get-PortableEnvironmentValue($Name) {
+    $scopes = if ($EnvironmentScope -eq 'User') { 'User', 'Machine', 'Process' } else { 'Process' }
+    foreach ($scope in $scopes) {
+        $value = Get-ScopedEnvironmentValue $Name $scope
+        if (-not [string]::IsNullOrEmpty($value)) {
+            return [pscustomobject]@{ Scope = $scope; Value = $value }
+        }
+    }
 }
 
 # Test-CondaPathConfigured
@@ -151,9 +203,10 @@ function Save-ManagedEnvironmentState {
 }
 
 # Install-PersistentEnvironment
-# Sets each managed environment value, overwriting conflicting existing values.
+# Sets required values and fills portable defaults without claiming existing values.
 function Install-PersistentEnvironment {
     $desiredValues = Get-PersistentEnvironment
+    $portableNames = Get-PortableEnvironmentNames
 
     # Register CONDA_PATH only when CustomShell would be the one setting it; a
     # user-provided valid value is respected and left unmanaged.
@@ -164,7 +217,7 @@ function Install-PersistentEnvironment {
         }
     }
 
-    $desiredNames = @($desiredValues.Keys)
+    $desiredNames = @($desiredValues.Keys) + $portableNames
     $existingByName = @{}
     foreach ($entry in (Get-ManagedEnvironmentState)) {
         $existingByName[$entry.name] = $entry
@@ -183,7 +236,7 @@ function Install-PersistentEnvironment {
             continue
         }
 
-        $current = [Environment]::GetEnvironmentVariable($name, $EnvironmentScope)
+        $current = Get-ScopedEnvironmentValue $name $EnvironmentScope
         if ($null -eq $current) {
             continue
         }
@@ -196,21 +249,43 @@ function Install-PersistentEnvironment {
             Write-Host "Would clear $EnvironmentScope environment variable $name"
         }
         else {
-            [Environment]::SetEnvironmentVariable($name, $null, $EnvironmentScope)
+            Set-ScopedEnvironmentValue $name $null $EnvironmentScope
             Write-Host "Cleared $EnvironmentScope environment variable $name (no longer managed)"
         }
     }
 
-    foreach ($name in $desiredValues.Keys) {
-        $desired = $desiredValues[$name]
-        $current = [Environment]::GetEnvironmentVariable($name, $EnvironmentScope)
+    foreach ($name in $desiredNames) {
+        if ($name -in $portableNames) {
+            $configured = Get-PortableEnvironmentValue $name
+            if ($configured) {
+                $entry = $existingByName[$name]
+                if ($configured.Scope -eq $EnvironmentScope -and $entry -and
+                    [string]::Equals($configured.Value, $entry.desired, [StringComparison]::Ordinal)) {
+                    $managed.Add($entry)
+                }
+                if ($EnvironmentScope -eq 'User' -and $configured.Scope -eq 'Process') {
+                    Write-Host "Keeping Process environment variable ${name} (not persistent)"
+                }
+                continue
+            }
+            $desired = Get-PortableEnvironmentDefault $name
+            if ([string]::IsNullOrEmpty($desired)) {
+                Write-Warning "No default available for environment variable ${name}."
+                continue
+            }
+            $current = $null
+        }
+        else {
+            $desired = $desiredValues[$name]
+            $current = Get-ScopedEnvironmentValue $name $EnvironmentScope
+        }
 
         if ($current -ne $desired) {
             if ($DryRun) {
                 Write-Host "Would set $EnvironmentScope environment variable ${name}=$desired"
             }
             else {
-                [Environment]::SetEnvironmentVariable($name, $desired, $EnvironmentScope)
+                Set-ScopedEnvironmentValue $name $desired $EnvironmentScope
                 Write-Host "Set $EnvironmentScope environment variable ${name}=$desired"
             }
         }
@@ -225,17 +300,27 @@ function Install-PersistentEnvironment {
 # Clears managed environment values that still match their desired value.
 function Uninstall-PersistentEnvironment {
     $remaining = [System.Collections.Generic.List[object]]::new()
+    $portableNames = Get-PortableEnvironmentNames
 
     foreach ($entry in (Get-ManagedEnvironmentState)) {
         $name = $entry.name
-        $current = [Environment]::GetEnvironmentVariable($name, $EnvironmentScope)
+        $current = Get-ScopedEnvironmentValue $name $EnvironmentScope
         if ($null -eq $current) {
             continue
         }
 
-        if ($null -eq $entry.desired -or $current -ne $entry.desired) {
+        $isPortable = $name -in $portableNames
+        $isModified = if ($isPortable) {
+            -not [string]::Equals($current, $entry.desired, [StringComparison]::Ordinal)
+        }
+        else {
+            $current -ne $entry.desired
+        }
+        if ($null -eq $entry.desired -or $isModified) {
             Write-Warning "Keeping modified environment variable ${name}: '$current'."
-            $remaining.Add($entry)
+            if (-not $isPortable) {
+                $remaining.Add($entry)
+            }
             continue
         }
 
@@ -243,7 +328,7 @@ function Uninstall-PersistentEnvironment {
             Write-Host "Would clear $EnvironmentScope environment variable $name"
         }
         else {
-            [Environment]::SetEnvironmentVariable($name, $null, $EnvironmentScope)
+            Set-ScopedEnvironmentValue $name $null $EnvironmentScope
             Write-Host "Cleared $EnvironmentScope environment variable $name"
         }
     }

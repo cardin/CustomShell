@@ -33,8 +33,8 @@ configuration files recorded in the manifest, and the Clink script path and
 settings recorded in the state file.
 
 .PARAMETER Force
-Replace conflicting configuration files. Managed environment values always win
-and do not require this switch.
+Replace conflicting configuration files. Required environment values do not
+need this switch; portable environment defaults never replace nonempty values.
 
 .PARAMETER ProfilePath
 Override the profile file to edit. Defaults to the current user's all-hosts

@@ -7,7 +7,7 @@ set -u
 
 test_root="$(mktemp -d)" || exit 1
 trap 'rm -rf -- "$test_root"' EXIT
-mkdir -p "$test_root/home" "$test_root/bin"
+mkdir -p "$test_root/home" "$test_root/bin" "$test_root/temp dir"
 
 # Prevent the startup test from changing Git configuration or launching a real
 # SSH agent outside its disposable shell.
@@ -33,12 +33,24 @@ chmod +x "$test_root/bin/oh-my-posh" "$test_root/bin/starship"
 chmod +x "$test_root/home/.local/share/fnm/fnm"
 
 main_script="$(dirname "${BASH_SOURCE[0]}")/../main.sh"
-HOME="$test_root/home" USER=cardi-test PATH="$test_root/bin:$PATH" \
+# shellcheck disable=SC2016 # Variables are expanded by the child Bash.
+env -u TMPDIR -u PROJECTS_L -u PROJECTS_W -u SSH_AUTH_SOCK -u SSH_AGENT_PID \
+	HOME="$test_root/home" USER=cardi-test USERPROFILE="$test_root/windows" PATH="$test_root/bin:$PATH" \
 	bash -u -c '
         source "$1"
+        [[ "$TMPDIR" == /tmp && "$(printenv TMPDIR)" == /tmp ]] || exit 1
+        [[ "$PROJECTS_L" == "$2/home/projects_l" ]] || exit 1
+        [[ "$(printenv PROJECTS_W)" == "$2/windows/projects_w" ]] || exit 1
+        [[ "$HOME" == "$2/home" && "$USER" == cardi-test && "$USERPROFILE" == "$2/windows" ]] || exit 1
+        TMPDIR="$2/temp dir"
+        PROJECTS_L="$2/alt projects"
+        PROJECTS_W="$2/alt windows"
         env_inode=$(stat -c %i "$HOME/.config/environment.d/90-customshell.conf")
         shell_env_inode=$(stat -c %i "$HOME/.config/customshell/env.sh")
         source "$1"
+        [[ "$(printenv TMPDIR)" == "$2/temp dir" ]] || exit 1
+        [[ "$(printenv PROJECTS_L)" == "$2/alt projects" ]] || exit 1
+        [[ "$(printenv PROJECTS_W)" == "$2/alt windows" ]] || exit 1
         declare -F Protect-Tar >/dev/null
         declare -F Unprotect-Tar >/dev/null
         declare -F list_cert_chain >/dev/null
@@ -55,7 +67,7 @@ HOME="$test_root/home" USER=cardi-test PATH="$test_root/bin:$PATH" \
         [[ "$(wc -l <"$HOME/agent-starts")" == 1 ]]
         fnm_count=$(printf "%s" "$PATH" | tr ":" "\n" | grep -Fxc "$HOME/.local/share/fnm")
         [[ "$fnm_count" == 1 ]]
-    ' bash "$main_script" || {
+    ' bash "$main_script" "$test_root" || {
 	echo "FAIL: main.sh did not tolerate repeated sourcing" >&2
 	exit 1
 }

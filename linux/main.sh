@@ -21,6 +21,9 @@ if [[ "$IS_WSL" == true ]]; then
 	source "$CUSTOMSHELL_LINUX_DIR/platform/wsl.sh"
 fi
 
+# Portable defaults run after the WSL helpers, which may derive USERPROFILE.
+source "$CUSTOMSHELL_LINUX_DIR/core/portable-env.sh"
+
 # Certificate exports precede tool and prompt initialization, and must run
 # before environment-d.sh below, which republishes them to the user session.
 source "$CUSTOMSHELL_LINUX_DIR/startup/certificates.sh"

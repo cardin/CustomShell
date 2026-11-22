@@ -27,6 +27,11 @@ environment values, and platform details are in
 In Windows PowerShell, run `opencode-wsl` to launch OpenCode in the default
 WSL distribution. Inside WSL, the command is still `opencode`.
 
+Scripts can use `TMPDIR`, `USER`, `HOME`, `PROJECTS_W`, and `PROJECTS_L` on both
+sides after setup. See
+[portable environment variables](docs/INTERFACES.md#portable-environment-variables)
+for defaults and session scope.
+
 ## Documentation
 
 - [Requirements](docs/REQUIREMENTS.md) — required behavior and constraints.

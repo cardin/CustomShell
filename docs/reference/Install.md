@@ -100,11 +100,24 @@ successful install. `CONDA_PATH` is recorded only when setup set it, and
 `-EnvironmentScope Process` applies changes to the current process only and
 exists so tests never touch the registry.
 
+Windows setup also fills in missing `TMPDIR`, `USER`, `HOME`, `PROJECTS_W`, and
+`PROJECTS_L` values in User scope. `PROJECTS_L` is resolved through `wsl.exe`
+and stays unset when WSL is unavailable. It never replaces a nonempty value,
+even with `-Force`. `-Check`
+accepts existing User or Machine values and reports a process-only value as
+not persistent. If you want setup to fill that name, rerun it from a process
+without the override. An install rerun drops ownership of an edited default.
+See [portable environment variables](../INTERFACES.md#portable-environment-variables).
+
 On Linux and WSL, runtime startup also writes a safely shell-quoted copy to
 `~/.config/customshell/env.sh`. The managed `~/.profile` block sources it, so
 POSIX login shells (`sh -lc`) and Bash login shells see the certificate and tool
 values at exec without starting an interactive Bash. The artifact is written
 only from values that are present and valid; a missing artifact is a no-op.
+
+On Linux and WSL, rerun setup to add the `TMPDIR`, `PROJECTS_L`, and
+`PROJECTS_W` fallbacks to the managed `~/.profile` hook. Bash startup and the
+login hook set these at runtime, not through a generated file.
 
 Processes already running before setup keep their old environment block, so a
 new session may not see new values until the environment refreshes (sign out and

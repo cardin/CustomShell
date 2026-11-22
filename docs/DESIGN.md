@@ -18,6 +18,7 @@ sequenceDiagram
     opt IS_WSL
         Main->>Modules: platform/wsl.sh
     end
+    Main->>Modules: core/portable-env.sh (fill TMPDIR and PROJECTS_* defaults)
     Main->>Modules: startup/certificates.sh, then integrations/tools.sh (zoxide)
     opt Interactive Bash
         Main->>Modules: integrations/prompt.sh, then bind config/inputrc
@@ -30,7 +31,7 @@ sequenceDiagram
     end
 ```
 
-Sources: [entry point](../linux/main.sh#L12-L44),
+Sources: [entry point](../linux/main.sh#L12-L48),
 [zoxide initialization](../linux/integrations/tools.sh#L64-L74),
 [prompt initialization](../linux/integrations/prompt.sh),
 [environment publication](../linux/startup/environment-d.sh#L75-L98).
@@ -80,7 +81,7 @@ flowchart TD
         LI -->|uninstall| LU["Remove hooks and shims, restore Git helper,<br/>customshell_environment_uninstall"]
     end
     LM --> RC[".bashrc block: export values and source linux/main.sh"]
-    LM --> LP[".profile block: source env.sh when readable"]
+    LM --> LP[".profile block: source portable-env.sh and env.sh when readable"]
     subgraph R["Linux runtime"]
         MAIN["linux/main.sh"] -->|sources| PUB["startup/environment-d.sh"]
     end

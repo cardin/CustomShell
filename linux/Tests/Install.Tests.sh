@@ -174,6 +174,35 @@ login_values="$(
 [[ "$login_values" == unset ]] ||
 	fail "missing login environment artifact still exported a value"
 
+# The login hook works independently of the generated artifact and honors
+# an override, including one containing spaces.
+for login_shell in sh bash; do
+	for temp_case in unset empty custom; do
+		login_env=(HOME="$login_home" PATH=/usr/bin:/bin USER=login-probe USERPROFILE="$test_root/windows")
+		expected_temp=/tmp
+		case "$temp_case" in
+		empty) login_env+=(TMPDIR=) ;;
+		custom)
+			expected_temp="$test_root/temp dir"
+			login_env+=(TMPDIR="$expected_temp")
+			;;
+		esac
+		login_values="$(
+			env -i "${login_env[@]}" "$login_shell" -lc \
+				'printenv TMPDIR HOME USER USERPROFILE PROJECTS_L PROJECTS_W'
+		)" || fail "$login_shell -lc failed with $temp_case TMPDIR"
+		[[ "$login_values" == "$expected_temp"$'\n'"$login_home"$'\n'login-probe$'\n'"$test_root/windows"$'\n'"$login_home/projects_l"$'\n'"$test_root/windows/projects_w" ]] ||
+			fail "$login_shell -lc did not export the expected values with $temp_case TMPDIR"
+	done
+done
+
+# Without a Windows profile, PROJECTS_W stays unavailable instead of guessing.
+login_values="$(
+	env -i HOME="$login_home" PATH=/usr/bin:/bin sh -lc 'printf "%s|%s" "${PROJECTS_W-unset}" "$PROJECTS_L"'
+)" || fail "sh -lc failed without USERPROFILE"
+[[ "$login_values" == "unset|$login_home/projects_l" ]] ||
+	fail "native login exported PROJECTS_W without a Windows profile"
+
 # The fd shim exposes fdfind under its expected name so scripts and
 # non-interactive shells see it, not only interactive aliases.
 fd_shim="$test_root/home/.local/bin/fd"

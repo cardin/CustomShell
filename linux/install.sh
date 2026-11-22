@@ -104,11 +104,13 @@ while IFS= read -r line; do
 done < <(customshell_persistent_env_lines)
 desired_block_lines+=(". $(shell_single_quote "$entry_script")")
 
-# POSIX login shells (`sh -lc`) and Bash login shells read ~/.profile even when
-# they do not read ~/.bashrc. Source the runtime-generated, shell-quoted
-# environment artifact there so certificate and tool variables are present at
-# exec for launchers that never start an interactive Bash.
+# The POSIX login hook fills the temp default at login, independently of the
+# generated artifact that supplies certificate and tool values.
+portable_env_script="$(shell_single_quote "$project_dir/linux/core/portable-env.sh")"
 desired_posix_block_lines=(
+	"if [ -r $portable_env_script ]; then"
+	"    . $portable_env_script"
+	"fi"
 	"if [ -r \"\${HOME}/.config/customshell/env.sh\" ]; then"
 	"    . \"\${HOME}/.config/customshell/env.sh\""
 	"fi"
