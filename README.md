@@ -24,6 +24,9 @@ Setup is idempotent and safe to re-run. It supports `-Check`/`--check`,
 environment values, and platform details are in
 [Install.md](docs/reference/Install.md).
 
+In Windows PowerShell, run `opencode-wsl` to launch OpenCode in the default
+WSL distribution. Inside WSL, the command is still `opencode`.
+
 ## Documentation
 
 - [Requirements](docs/REQUIREMENTS.md) — required behavior and constraints.

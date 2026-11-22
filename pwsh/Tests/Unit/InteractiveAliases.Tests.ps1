@@ -5,6 +5,7 @@ Describe 'WSL command exposure' {
     BeforeAll {
         $script:aliasScript = Join-Path $PSScriptRoot '..\..\Startup\Set-InteractiveAliases.ps1'
         $script:testCommand = 'customshell-wsl-probe'
+        $script:testAlias = "$testCommand-wsl"
         $script:testFunction = 'Invoke-WslCustomshellWslProbe'
     }
 
@@ -21,6 +22,7 @@ Describe 'WSL command exposure' {
         Remove-Item -Path Function:\global:wsl -ErrorAction SilentlyContinue
         Remove-Item -Path "Function:\global:$testFunction" -ErrorAction SilentlyContinue
         Remove-Item -Path "Alias:\$testCommand" -ErrorAction SilentlyContinue
+        Remove-Item -Path "Alias:\$testAlias" -ErrorAction SilentlyContinue
         Remove-Variable -Name customShellSettings -Scope Global -ErrorAction SilentlyContinue
         Remove-Variable -Name CustomShellManagedWslCommands -Scope Global -ErrorAction SilentlyContinue
         $script:receivedWslArguments = $null
@@ -58,6 +60,37 @@ Describe 'WSL command exposure' {
         finally {
             Remove-Item -Path "Function:\global:$nativeName" -ErrorAction SilentlyContinue
             Remove-Item -Path "Alias:\$nativeName" -ErrorAction SilentlyContinue
+        }
+    }
+
+    It 'replaces the old alias with the configured Windows name and forwards to the original WSL command' {
+        $global:customShellSettings = @{ WslCommands = @(@{ Command = $testCommand; Alias = $testAlias }) }
+
+        . $script:aliasScript
+
+        Get-Alias -Name $testCommand -ErrorAction SilentlyContinue | Should -BeNullOrEmpty
+        & $testAlias '--flag' 'two words'
+        $script:receivedWslArguments[5] | Should -Be ('{0} "$@"' -f $testCommand)
+        ($script:receivedWslArguments[7..8] -join '|') | Should -Be '--flag|two words'
+    }
+
+    It 'allows a native command to coexist but does not shadow a native command at the configured alias' {
+        $global:customShellSettings = @{ WslCommands = @(@{ Command = $testCommand; Alias = $testAlias }) }
+        Set-Item -Path "Function:\global:$testCommand" -Value { 'native' }
+        try {
+            . $script:aliasScript
+
+            (& $testCommand) | Should -Be 'native'
+            (Get-Alias -Name $testAlias).Definition | Should -Be $testFunction
+
+            Set-Item -Path "Function:\global:$testAlias" -Value { 'native alias name' }
+            . $script:aliasScript
+
+            (& $testAlias) | Should -Be 'native alias name'
+            Get-Alias -Name $testAlias -ErrorAction SilentlyContinue | Should -BeNullOrEmpty
+        }
+        finally {
+            Remove-Item -Path "Function:\global:$testCommand", "Function:\global:$testAlias" -ErrorAction SilentlyContinue
         }
     }
 

@@ -152,7 +152,7 @@ flowchart TD
         WSL["wsl -e"]
         CMD["cmd.exe"]
         WINSSH["Windows .ssh directory"]
-        PS -->|configured command with no native provider| WSL
+        PS -->|configured alias with no native provider| WSL
     end
     subgraph L["WSL distribution"]
         LOGIN["bash -lic → configured command"]
@@ -177,6 +177,6 @@ flowchart TD
     WINSSH -->|read by| COPY
 ```
 
-Sources: [PowerShell wrapper](../pwsh/Startup/Set-InteractiveAliases.ps1#L76-L125),
+Sources: [PowerShell wrapper](../pwsh/Startup/Set-InteractiveAliases.ps1#L76-L133),
 [WSL startup helpers](../linux/platform/wsl.sh#L12-L75),
 [mirror call](../linux/platform/wsl.sh#L110-L204).

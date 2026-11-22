@@ -54,7 +54,7 @@ if publication fails.
 | `Show-Help` | PowerShell, Bash | Print the compact interactive command reference. |
 | `mirror-win-ssh` | WSL | Replace `$HOME/.ssh` from `$USERPROFILE/.ssh`. See [Mirror-Win-Ssh.md](reference/Mirror-Win-Ssh.md). |
 | `list_cert_chain` | Linux | Print the TLS chain for `HOST [PORT]`; default port `443`. Requires `gnutls-cli`; missing host exits `2`, missing tool exits `1`. |
-| WSL wrappers | PowerShell on Windows | One alias per `WslCommands` entry when no native command exists. |
+| WSL wrappers | PowerShell on Windows | One alias per `WslCommands` entry when the alias name is free. |
 
 ### Protect-Tar and Unprotect-Tar parameters
 
@@ -97,17 +97,22 @@ wildcards, or implement full OpenSSH precedence.
 
 ### WSL command wrappers
 
-`WslCommands` in `pwsh/Settings.psd1` names commands to expose. For each entry,
-when `wsl` exists and no native command or foreign alias already provides the
-name, startup creates:
+`WslCommands` in `pwsh/Settings.psd1` names commands to expose. A string uses
+the same name in PowerShell and WSL. A hashtable with `Command` and `Alias`
+sets the WSL command and PowerShell alias separately. For each entry, when `wsl`
+exists and the alias would not shadow a native command or foreign alias,
+startup creates:
 
 - function `Invoke-Wsl<PascalName>` (for example `Invoke-WslOpencode`);
-- global alias `<name>` pointing at that function.
+- a global alias pointing at that function.
+
+The default exposes `opencode` as `opencode-wsl`. The profile no longer creates
+a plain `opencode` alias, leaving that name available for native OpenCode.
 
 The wrapper runs:
 
 ```text
-wsl -e env CUSTOMSHELL_SUPPRESS_STARTUP_OUTPUT=true bash -lic '<name> "$@"' _ <args...>
+wsl -e env CUSTOMSHELL_SUPPRESS_STARTUP_OUTPUT=true bash -lic '<command> "$@"' _ <args...>
 ```
 
 Wrappers from a previous load are removed first, so removing an entry or
@@ -138,7 +143,7 @@ Windows settings are a PowerShell data file, `pwsh/Settings.psd1`:
 | --- | --- | --- |
 | `StartTimeoutSeconds` | number | Slow-start diagnostic threshold. |
 | `Prompt` | string | `ohmyposh`, `starship`, or `none`. |
-| `WslCommands` | string[] | Commands wrapped from the default WSL distribution. |
+| `WslCommands` | array of strings or hashtables | [WSL commands and their PowerShell aliases](#wsl-command-wrappers). |
 | `RequiredCommands` | string[] | Optional commands reported when missing; never fatal. |
 
 Linux settings are arrays in `linux/Settings.sh`:

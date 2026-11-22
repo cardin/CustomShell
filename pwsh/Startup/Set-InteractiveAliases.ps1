@@ -49,12 +49,12 @@ if (Get-Command vim -ErrorAction SilentlyContinue) {
 }
 
 # WSL commands
-# Exposes the commands listed in Settings.psd1 (WslCommands) that are only
-# available inside the default WSL distribution. Each command gets a global
+# Exposes the commands listed in Settings.psd1 (WslCommands) from the default
+# WSL distribution, optionally under a different alias. Each command gets a global
 # wrapper that runs it in an interactive login Bash through WSL, so it resolves
 # from the user's own environment, while CustomShell's interactive startup
-# output stays suppressed. A command is skipped when a native command or a
-# foreign alias already provides it.
+# output stays suppressed. A wrapper is skipped when a native command or a
+# foreign alias already provides the Windows-facing name.
 # Remove wrappers created by a previous profile load first, so deleting a
 # command from settings or installing a native command takes effect immediately.
 foreach ($managedWslCommand in @($global:CustomShellManagedWslCommands)) {
@@ -79,8 +79,15 @@ if (Get-Command wsl -ErrorAction SilentlyContinue) {
         $wslCommands = @($customShellSettings.WslCommands)
     }
 
-    foreach ($wslCommand in $wslCommands) {
-        if (-not $wslCommand) {
+    foreach ($wslEntry in $wslCommands) {
+        if ($wslEntry -is [hashtable]) {
+            $wslCommand = $wslEntry.Command
+            $wslAlias = $wslEntry.Alias
+        }
+        else {
+            $wslCommand = $wslAlias = $wslEntry
+        }
+        if (-not $wslCommand -or -not $wslAlias) {
             continue
         }
 
@@ -89,7 +96,7 @@ if (Get-Command wsl -ErrorAction SilentlyContinue) {
             }) -join ''
         $functionName = "Invoke-Wsl$pascalName"
 
-        $existing = Get-Command $wslCommand -ErrorAction SilentlyContinue
+        $existing = Get-Command $wslAlias -ErrorAction SilentlyContinue
         if ($existing -and -not ($existing.CommandType -eq 'Alias' -and $existing.Definition -eq $functionName)) {
             continue
         }
@@ -116,9 +123,9 @@ if (Get-Command wsl -ErrorAction SilentlyContinue) {
         }.GetNewClosure()
 
         Set-Item -Path "Function:\global:$functionName" -Value $wrapper -Force
-        Set-Alias -Name $wslCommand -Value $functionName -Scope Global -Force
+        Set-Alias -Name $wslAlias -Value $functionName -Scope Global -Force
         $managedWslCommands.Add([pscustomobject]@{
-                AliasName    = $wslCommand
+                AliasName    = $wslAlias
                 FunctionName = $functionName
                 ScriptBlock  = $wrapper
             })
