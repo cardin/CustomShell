@@ -175,6 +175,7 @@ bash linux/Tests/Archive.Tests.sh
 bash linux/Tests/Archive.Interop.Tests.sh
 bash linux/Tests/Environment.Tests.sh
 bash linux/Tests/Install.Tests.sh
+bash linux/Tests/NonInteractive.Tests.sh
 bash linux/Tests/Startup.Tests.sh
 bash linux/Tests/Wsl.Tests.sh
 ```

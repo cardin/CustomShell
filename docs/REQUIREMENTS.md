@@ -18,6 +18,9 @@ See the [Bash](DESIGN.md#bash-startup) and
 - **REQ-STARTUP-002:** Missing optional tools must not prevent shell startup.
 - **REQ-STARTUP-003:** Keep startup quiet outside appropriate interactive
   sessions, including embedded, nested, and explicitly quiet sessions.
+- **REQ-STARTUP-004:** Give non-interactive Bash the user-local command paths and
+  portable defaults without interactive output, prompt, certificate, or agent
+  setup.
 
 ## WSL interoperability
 

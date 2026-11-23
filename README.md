@@ -30,7 +30,9 @@ WSL distribution. Inside WSL, the command is still `opencode`.
 Scripts can use `TMPDIR`, `USER`, `HOME`, `PROJECTS_W`, and `PROJECTS_L` on both
 sides after setup. See
 [portable environment variables](docs/INTERFACES.md#portable-environment-variables)
-for defaults and session scope.
+for defaults and session scope. Non-interactive Bash started from a configured
+session also finds user-local commands through `BASH_ENV`; see
+[non-interactive shells](docs/INTERFACES.md#non-interactive-shells).
 
 ## Documentation
 

@@ -92,6 +92,8 @@ grep -Fq "export GTK_OVERLAY_SCROLLING=0" "$test_root/home/.bashrc" ||
 	fail "GTK environment value was not added to the profile block"
 grep -Fq "export UV_SYSTEM_CERTS=true" "$test_root/home/.bashrc" ||
 	fail "uv environment value was not added to the profile block"
+grep -Fq "export BASH_ENV='$repo_dir/linux/noninteractive.sh'" "$test_root/home/.bashrc" ||
+	fail "profile block does not export BASH_ENV"
 [[ "$(GIT_CONFIG_GLOBAL="$test_root/home/.gitconfig" git config --global --get-all credential.helper)" == "cache --timeout=21600" ]] || fail "Git credential helper was not configured"
 [[ -f "$XDG_STATE_HOME/customshell/git-credential-helper" ]] ||
 	fail "previous Git credential helper was not recorded"
@@ -108,6 +110,8 @@ bash_version_line="$(grep -n -F 'if [ -n "$BASH_VERSION" ]' "$profile_file" | cu
 	fail "POSIX login block is not before Bash-specific initialization"
 grep -Fq '. "${HOME}/.config/customshell/env.sh"' "$profile_file" ||
 	fail "POSIX login block does not source the shell environment artifact"
+grep -Fq "export BASH_ENV='$repo_dir/linux/noninteractive.sh'" "$profile_file" ||
+	fail "POSIX login block does not export BASH_ENV"
 
 # Re-running is idempotent.
 before_md5="$(md5_of "$test_root/home/.bashrc")"
@@ -164,6 +168,16 @@ for login_shell in sh bash; do
 	[[ "$login_values" == "$login_cert"$'\n'"$login_cert" ]] ||
 		fail "$login_shell -lc did not inherit the certificate variables"
 done
+
+# A Bash login shell exports BASH_ENV, so a non-interactive child started by a
+# tool inheriting the session sees the same user-local commands.
+printf 'printf "%%s" "$PATH"\n' >"$test_root/child-path.sh"
+login_child_path="$(
+	env -i HOME="$login_home" PATH=/usr/bin:/bin bash -lc \
+		'bash "$1"' bash "$test_root/child-path.sh"
+)" || fail "bash -lc could not start a non-interactive child"
+[[ ":$login_child_path:" == *":$login_home/.local/bin:"* ]] ||
+	fail "non-interactive child did not inherit the CustomShell paths"
 
 # A missing runtime artifact is a no-op, not a login-shell failure.
 rm -f -- "$login_home/.config/customshell/env.sh"

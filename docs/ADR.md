@@ -20,6 +20,7 @@ or merged; rejected drafts are removed before that. Status is `Accepted`,
 | --- | --- | --- |
 | ADR-0001 | Installer-owned environment values, runtime publication | Accepted |
 | ADR-0002 | Use native names for portable environment variables | Accepted |
+| ADR-0003 | Non-interactive Bash environment through BASH_ENV | Accepted |
 
 ## ADR-0001: Installer-owned environment values, runtime publication
 
@@ -50,3 +51,28 @@ can use the same names on Windows and WSL. Persist missing Windows values at
 setup so they reach processes that do not load PowerShell. Existing values
 take precedence over defaults, and WSL keeps its own user and home.
 See [portable environment variables](INTERFACES.md#portable-environment-variables).
+
+## ADR-0003: Non-interactive Bash environment through BASH_ENV
+
+- **Status:** Accepted
+- **Date:** 2026-11-23
+
+**Context.** Non-interactive Bash (`bash -c`, script runners, agent shells)
+reads no profile. The managed `.bashrc` block is skipped because the stock
+Debian guard returns for non-interactive shells, and `~/.profile` is read only
+by login shells. Those processes therefore missed `~/.local/bin` and the
+portable defaults even though the values were configured.
+
+**Decision.** Both managed blocks export `BASH_ENV` to
+`linux/noninteractive.sh` when it is empty. That entry point composes only
+`core/paths.sh` and `core/portable-env.sh`; it never sources `linux/main.sh`.
+A nonempty `BASH_ENV` is preserved so another tool's setting wins.
+
+**Consequences.** Children of a managed shell receive the paths and defaults,
+including tools that spawn Bash themselves. The entry point must stay silent and
+free of interactive setup, because it runs for every non-interactive Bash. The
+contract stops at inherited environments: processes launched without a profile,
+such as a Windows to WSL interoperability process, or started before setup, are
+unaffected and keep their own environment. Moving the repository requires a
+reinstall so the exported path follows it.
+See [non-interactive shells](INTERFACES.md#non-interactive-shells).

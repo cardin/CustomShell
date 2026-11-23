@@ -32,6 +32,7 @@ bash linux/Tests/Archive.Tests.sh
 bash linux/Tests/Archive.Interop.Tests.sh
 bash linux/Tests/Environment.Tests.sh
 bash linux/Tests/Install.Tests.sh
+bash linux/Tests/NonInteractive.Tests.sh
 bash linux/Tests/Startup.Tests.sh
 bash linux/Tests/Wsl.Tests.sh
 ```
@@ -51,6 +52,7 @@ real credentials, SSH data, certificates, or network services. WSL tests mock
 | --- | --- | --- | --- |
 | TP-STARTUP-01 | REQ-STARTUP-001, REQ-STARTUP-002 (partial), REQ-STARTUP-003 (partial) | `linux/Tests/Startup.Tests.sh` | Repeated sourcing is safe, commands are defined, startup checks do not run, `TMOUT`/device flags are set, both environment artifacts keep their inode, the agent starts once, and the fnm path is not duplicated. |
 | TP-STARTUP-02 | [Prompt configuration](reference/Install.md#prompt-configuration), [Bash startup](DESIGN.md#bash-startup) | `linux/Tests/Startup.Tests.sh` | `PROMPT_COMMAND` hooks survive repeated sourcing in order, and Oh My Posh/Starship theme selection matches standalone, WSL-bare, and native-bare contexts. |
+| TP-STARTUP-03 | REQ-STARTUP-004, [Non-interactive shells](INTERFACES.md#non-interactive-shells) | `linux/Tests/NonInteractive.Tests.sh` | Sourcing from `BASH_ENV` is silent and idempotent, adds only the user-local paths and portable defaults, preserves existing values, leaves strict callers working, runs no agent or prompt setup, and stays inert when relocated without its core files or without `HOME`. |
 | TP-WSL-01 | REQ-WSL-001 (partial), REQ-MIRROR-001 (partial), REQ-MIRROR-003 (partial) | `linux/Tests/Wsl.Tests.sh` | `mirror-win-ssh` publishes new content, removes stale entries, leaves data untouched when staging fails, and cleans staging; `USERPROFILE` is derived or warned about; the `BROWSER` wrapper is generated, stale-safe, mount-aware, and never overwrites a value. |
 | TP-PWSH-01 | REQ-STARTUP-001, [PowerShell module](INTERFACES.md#powershell-module) | `pwsh/Tests/Integration/Profile.Tests.ps1` | The profile loads twice without errors, exports module commands, and keeps the zoxide hook active after prompt initialization. |
 | TP-PWSH-02 | REQ-STARTUP-002 (partial) | `pwsh/Tests/Unit/Integrations.Tests.ps1` | An empty VS Code shell-integration path is ignored instead of executed. |
@@ -58,7 +60,7 @@ real credentials, SSH data, certificates, or network services. WSL tests mock
 | TP-PWSH-04 | REQ-STARTUP-003 (partial) | `pwsh/Tests/Unit/StartupStatus.Tests.ps1` | `Show-Help` exists, the obsolete missing-command helper is gone, and startup does not warn about configured commands. |
 | TP-PWSH-05 | [Prompt configuration](reference/Install.md#prompt-configuration) | `pwsh/Tests/Unit/Prompt.Tests.ps1` | Starship uses the plain-text theme outside a standalone terminal and the powerline theme inside one. |
 | TP-PWSH-06 | [`Get-SSHConfig`](INTERFACES.md#get-sshconfig) | `pwsh/Tests/Unit/Ssh.Tests.ps1` | All aliases on a `Host` line receive the block's `HostName`/`User`/`Port`, and a missing config returns nothing. |
-| TP-INSTALL-01 | REQ-INSTALL-001, REQ-INSTALL-002 (partial), REQ-INSTALL-003 | `linux/Tests/Install.Tests.sh` | Disposable-home install, idempotent block insertion and replacement, dry-run/check behaviour, Git helper ownership and failure cleanup, uninstall, and command inventory across WSL and native Linux. |
+| TP-INSTALL-01 | REQ-INSTALL-001, REQ-INSTALL-002 (partial), REQ-INSTALL-003 | `linux/Tests/Install.Tests.sh` | Disposable-home install, idempotent block insertion and replacement, the `BASH_ENV` export in both blocks, dry-run/check behaviour, Git helper ownership and failure cleanup, uninstall, and command inventory across WSL and native Linux. |
 | TP-INSTALL-02 | REQ-INSTALL-001, REQ-INSTALL-002 (partial), REQ-INSTALL-003 (partial) | `pwsh/Tests/Unit/Install.Tests.ps1` | Profile block lifecycle, environment ownership, Espanso copy/upgrade/uninstall, Clink registration and prompt switching, `-Force` backups, dry-run/check, help, and state preserved when modified. |
 | TP-ENV-01 | [Environment publication](INTERFACES.md#environment-publication) | `linux/Tests/Environment.Tests.sh` | Both generated files have the expected content, unchanged content is not republished, failed publication leaves the previous files and no temporary data, and shell quoting preserves spaces, quotes, and metacharacters. |
 | TP-ENV-02 | [Portable environment variables](INTERFACES.md#portable-environment-variables) | `pwsh/Tests/Unit/PortableEnvironment.Tests.ps1`, `linux/Tests/{Startup,Install}.Tests.sh` | Windows fills only missing values, derives the WSL projects path, diagnoses process-only values, and keeps preexisting or edited values on uninstall. Bash and POSIX login shells export the temp and projects fallbacks, leave `PROJECTS_W` unset without a Windows profile, and preserve overrides. |
@@ -75,6 +77,7 @@ is covered when changing it.
 | Requirement or contract | Gap |
 | --- | --- |
 | REQ-STARTUP-003 | No check asserts output is suppressed in nested, embedded, or explicitly suppressed sessions. |
+| REQ-STARTUP-004 | No check covers a launch that never inherits the managed environment: a Windows to WSL interoperability process, a service, a container, or a shell started before setup. |
 | REQ-WSL-001 | WSL tests source the platform module directly; they do not assert the native Linux startup guard. |
 | [Environment publication](INTERFACES.md#environment-publication) | Startup tests assert file stability but not every partial-publication failure; `TP-ENV-01` covers the publisher directly. |
 | REQ-INSTALL-002 | No negative test verifies that setup leaves secrets, SSH data, and CA state untouched, that global Git changes are limited to the Linux installer's credential helper, or that PowerShell startup leaves global Git configuration untouched. |

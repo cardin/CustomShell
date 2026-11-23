@@ -82,6 +82,8 @@ flowchart TD
     end
     LM --> RC[".bashrc block: export values and source linux/main.sh"]
     LM --> LP[".profile block: source portable-env.sh and env.sh when readable"]
+    LM --> LB[".bashrc and .profile blocks: export BASH_ENV when empty"]
+    LB --> NB["linux/noninteractive.sh<br/>paths and portable defaults only"]
     subgraph R["Linux runtime"]
         MAIN["linux/main.sh"] -->|sources| PUB["startup/environment-d.sh"]
     end
@@ -97,6 +99,15 @@ installing. Sources: [PowerShell mode dispatch](../pwsh/Install.ps1#L94-L151),
 [Bash hook generation and mode dispatch](../linux/install.sh#L99-L147),
 [Linux runtime publisher](../linux/startup/environment-d.sh),
 [environment ownership decision](ADR.md#adr-0001-installer-owned-environment-values-runtime-publication).
+
+Non-interactive Bash never loads `linux/main.sh`. The managed blocks export
+`BASH_ENV` to
+[`linux/noninteractive.sh`](../linux/noninteractive.sh), which composes only
+`core/paths.sh` and `core/portable-env.sh`. Keeping it separate is deliberate:
+`main.sh` starts the SSH agent, selects a prompt, and may print startup help,
+which build tools and agent shells must not see. A launch that runs no profile
+at all, such as a Windows to WSL interoperability process, still bypasses both
+entry points; see [ADR-0003](ADR.md#adr-0003-non-interactive-bash-environment-through-bash_env).
 
 ## Archive commands
 

@@ -16,6 +16,7 @@ set -u
 project_dir="$({ cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P; })"
 install_dir="$project_dir/linux/install"
 entry_script="$project_dir/linux/main.sh"
+noninteractive_script="$project_dir/linux/noninteractive.sh"
 
 marker_begin="# >>> CustomShell >>>"
 marker_end="# <<< CustomShell <<<"
@@ -102,12 +103,18 @@ desired_block_lines=()
 while IFS= read -r line; do
 	[[ -n "$line" ]] && desired_block_lines+=("$line")
 done < <(customshell_persistent_env_lines)
+while IFS= read -r line; do
+	[[ -n "$line" ]] && desired_block_lines+=("$line")
+done < <(bash_env_export_lines)
 desired_block_lines+=(". $(shell_single_quote "$entry_script")")
 
 # The POSIX login hook fills the temp default at login, independently of the
 # generated artifact that supplies certificate and tool values.
 portable_env_script="$(shell_single_quote "$project_dir/linux/core/portable-env.sh")"
 desired_posix_block_lines=(
+	"if [ -z \"\${BASH_ENV:-}\" ]; then"
+	"    export BASH_ENV=$(shell_single_quote "$noninteractive_script")"
+	"fi"
 	"if [ -r $portable_env_script ]; then"
 	"    . $portable_env_script"
 	"fi"

@@ -22,8 +22,11 @@ bash <repo>/linux/install.sh
   second managed block in `~/.profile` sources the runtime-generated
   `~/.config/customshell/env.sh` for POSIX login shells (`sh -lc`) and Bash
   login shells, whose startup does not reach CustomShell's interactive
-  `.bashrc` block. A stale block is updated in place; an unmarked manual
-  `source` line is reported and left untouched.
+  `.bashrc` block. Both Linux blocks also point `BASH_ENV` at
+  `linux/noninteractive.sh` when it is empty, so `bash -c` and scripts started
+  by tools inherit the user-local paths and portable defaults. A stale block is
+  updated in place; an unmarked manual `source` line is reported and left
+  untouched.
 - Persists the environment values listed under
   [Persistent environment](#persistent-environment).
 - Installs or registers shared tool configuration:
@@ -118,6 +121,13 @@ only from values that are present and valid; a missing artifact is a no-op.
 On Linux and WSL, rerun setup to add the `TMPDIR`, `PROJECTS_L`, and
 `PROJECTS_W` fallbacks to the managed `~/.profile` hook. Bash startup and the
 login hook set these at runtime, not through a generated file.
+
+`BASH_ENV` is set to `linux/noninteractive.sh` only when it is empty, in both
+Linux blocks. That entry point adds `~/.local/bin` and the Linuxbrew directory
+and fills the same `TMPDIR` and project defaults for non-interactive Bash, so a
+`bash -c` or script runner launched from a configured session finds the same
+commands. It intentionally skips interactive setup. An existing `BASH_ENV` is
+kept, so another tool's value wins; remove it and rerun setup to opt in.
 
 Processes already running before setup keep their old environment block, so a
 new session may not see new values until the environment refreshes (sign out and
@@ -243,6 +253,10 @@ across Espanso versions.
 
 ## Known limitations
 
+- `BASH_ENV` coverage depends on inheritance. A process that runs no profile,
+  such as a Windows to WSL interoperability launch, a service with its own
+  environment, or a shell started before setup, keeps its own `PATH` and
+  defaults. Restart the launching host after setup.
 - Clink configuration is skipped when `clink` is not on `PATH`; installer runs
   report an advisory and `-Check` treats it as optional.
 - Clink always uses the standalone (glyph) themes, so a glyph-limited console
