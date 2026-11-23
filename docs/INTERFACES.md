@@ -204,6 +204,7 @@ On Linux and WSL, processes that bypass the shell hooks do not get the
 | `GTK_OVERLAY_SCROLLING` | Linux | `0`, traditional GTK scrollbars. |
 | `UV_SYSTEM_CERTS` | Both | `true`, use the platform certificate store. |
 | `BASH_ENV` | Linux | `linux/noninteractive.sh` when empty; preserved when already set. [Non-interactive shells](#non-interactive-shells). |
+| `CUSTOMSHELL_SYSTEM_BIN_DIR` | WSL | Directory for the generated `cmd.exe` shim; defaults to `/usr/local/bin`. |
 | `WSLENV` | Windows | `USERPROFILE/up`. |
 | `CONDA_PATH` | Windows | Directory containing `conda.exe`, when found; an existing valid value stays unmanaged. |
 | `STARSHIP_CONFIG` | Windows | Repository Starship theme while `Prompt = 'starship'`; cleared otherwise. |
@@ -213,6 +214,7 @@ On Linux and WSL, processes that bypass the shell hooks do not get the
 | Variable | Platform | Contract |
 | --- | --- | --- |
 | `BROWSER` | WSL | Generated Windows-browser wrapper; an existing value is kept. |
+| `CUSTOMSHELL_WINDOWS_MOUNT` | WSL | Drive mount root used to resolve `cmd.exe` when PATH lacks the Windows directories; defaults to `/mnt`. |
 | `USERPROFILE` | WSL | Derived through `cmd.exe` and `wslpath` when absent. |
 | `SSH_AUTH_SOCK`, `SSH_AGENT_PID` | Linux | Published by the reusable SSH agent. |
 | `OMP_THEME` | Linux | Oh My Posh theme name for the current terminal context. |
@@ -228,6 +230,7 @@ On Linux and WSL, processes that bypass the shell hooks do not get the
 | `%LOCALAPPDATA%\CustomShell\installed.txt` | Windows setup | Tracked installed configuration files. |
 | `%LOCALAPPDATA%\CustomShell\clink.json` | Windows setup | Previous and managed Clink state. |
 | `${XDG_STATE_HOME:-~/.local/state}/customshell/git-credential-helper` | Linux setup | Previous Git credential-helper values. |
+| `/usr/local/bin/cmd.exe` | Linux setup (WSL) | Shim exposing Windows `cmd.exe` to processes started without the Windows PATH. |
 | `~/.config/environment.d/90-customshell.conf` | Linux startup | systemd user environment. |
 | `~/.config/customshell/env.sh` | Linux startup | POSIX login-shell environment. |
 | `~/.cache/customshell/ssh-agent.env` | Linux startup | Reusable agent variables. |

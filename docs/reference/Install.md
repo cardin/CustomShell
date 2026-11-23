@@ -29,6 +29,11 @@ bash <repo>/linux/install.sh
   untouched.
 - Persists the environment values listed under
   [Persistent environment](#persistent-environment).
+- Installs a `cmd.exe` shim at `/usr/local/bin/cmd.exe` on WSL, using sudo only
+  for that file. Processes started without the Windows directories on PATH, such
+  as the OpenCode Desktop server, need it to launch Windows programs and the
+  default browser. `CUSTOMSHELL_SYSTEM_BIN_DIR` relocates the target, and
+  `--no-wsl-shim` skips it.
 - Installs or registers shared tool configuration:
   - Espanso (Windows): `config/espanso/customshell.yml` is installed into the
     `match/` directory of the root Espanso reports for itself. See
@@ -60,7 +65,8 @@ here.
 
 ## What it does not do
 
-- No package installation and no privilege escalation.
+- No package installation. The WSL `cmd.exe` shim is the only system file setup
+  writes, and it uses sudo only when the target directory is not writable.
 - No creation of symbolic links or junctions on Windows; configuration files
   are copied so no elevation is required.
 - No changes to secrets, SSH data, or CA certificates. Git credential-helper

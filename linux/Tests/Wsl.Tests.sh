@@ -170,4 +170,65 @@ Blue="" HOME="$browser_root/home" PATH="$test_root/bin:$PATH" BROWSER=vim \
 ' bash "$(dirname "${BASH_SOURCE[0]}")/../platform/wsl.sh" ||
     fail "existing BROWSER was overwritten"
 
+# Shared cmd.exe discovery: the installer embeds the same executable in
+# /usr/local/bin/cmd.exe, so it must work without a login shell, honor the
+# mount root, and reject paths that cannot be embedded safely.
+wsl_core="$(dirname "${BASH_SOURCE[0]}")/../core/wsl-interop.sh"
+
+PATH=/usr/bin:/bin CUSTOMSHELL_WINDOWS_MOUNT="$win_mount" \
+    bash -u -c 'source "$1"; [[ "$(customshell_find_cmd_exe)" == "$2/c/Windows/System32/cmd.exe" ]]' \
+    bash "$wsl_core" "$win_mount" ||
+    fail "cmd.exe discovery did not use the mounted Windows directory"
+
+lower_mount="$browser_root/lowermount"
+mkdir -p "$lower_mount/d/Windows/system32"
+printf '#!/bin/sh\nexit 0\n' >"$lower_mount/d/Windows/system32/cmd.exe"
+chmod +x "$lower_mount/d/Windows/system32/cmd.exe"
+
+PATH=/usr/bin:/bin CUSTOMSHELL_WINDOWS_MOUNT="$lower_mount" \
+    bash -u -c 'source "$1"; [[ "$(customshell_find_cmd_exe)" == "$2/d/Windows/system32/cmd.exe" ]]' \
+    bash "$wsl_core" "$lower_mount" ||
+    fail "cmd.exe discovery did not accept the lowercase system32 directory"
+
+PATH=/usr/bin:/bin CUSTOMSHELL_WINDOWS_MOUNT="$browser_root/empty" \
+    bash -u -c 'source "$1"; ! customshell_find_cmd_exe' bash "$wsl_core" ||
+    fail "cmd.exe discovery reported a binary without a Windows mount"
+
+# The override drives detection for tests and installer checks.
+PATH=/usr/bin:/bin CUSTOMSHELL_IS_WSL=true \
+    bash -u -c 'source "$1"; customshell_is_wsl' bash "$wsl_core" ||
+    fail "WSL override did not report WSL"
+PATH=/usr/bin:/bin CUSTOMSHELL_IS_WSL=false \
+    bash -u -c 'source "$1"; ! customshell_is_wsl' bash "$wsl_core" ||
+    fail "WSL override did not report native Linux"
+
+# Paths with quotes or newlines cannot be embedded in the generated shim.
+PATH=/usr/bin:/bin bash -u -c '
+    source "$1"
+    customshell_cmd_exe_usable "/mnt/c/Windows/System32/cmd.exe" || exit 2
+    customshell_cmd_exe_usable "" && exit 3
+    customshell_cmd_exe_usable "/mnt/c/a\"b/cmd.exe" && exit 4
+    customshell_cmd_exe_usable $'"'"'/mnt/c/a\nb/cmd.exe'"'"' && exit 5
+    exit 0
+' bash "$wsl_core" || fail "cmd.exe path safety check is wrong"
+
+# Once installed, the shim itself resolves on PATH; discovery must skip it and
+# report the Windows binary behind the mount instead.
+shim_path_dir="$browser_root/shimbin"
+mkdir -p "$shim_path_dir"
+printf '#!/bin/sh\nexit 0\n' >"$shim_path_dir/cmd.exe"
+chmod +x "$shim_path_dir/cmd.exe"
+PATH="$shim_path_dir:/usr/bin:/bin" CUSTOMSHELL_WINDOWS_MOUNT="$win_mount" \
+    CUSTOMSHELL_SYSTEM_BIN_DIR="$shim_path_dir" \
+    bash -u -c 'source "$1"; [[ "$(customshell_find_cmd_exe)" == "$2/c/Windows/System32/cmd.exe" ]]' \
+    bash "$wsl_core" "$win_mount" ||
+    fail "cmd.exe discovery returned the installed shim"
+
+# An unrelated cmd.exe on PATH still wins, so existing wrappers are unchanged.
+PATH="$test_root/bin:/usr/bin:/bin" CUSTOMSHELL_WINDOWS_MOUNT="$win_mount" \
+    CUSTOMSHELL_SYSTEM_BIN_DIR="$browser_root/otherbin" \
+    bash -u -c 'source "$1"; [[ "$(customshell_find_cmd_exe)" == "$2/bin/cmd.exe" ]]' \
+    bash "$wsl_core" "$test_root" ||
+    fail "cmd.exe discovery ignored a PATH binary"
+
 echo "WSL tests passed"

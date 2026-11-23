@@ -30,6 +30,9 @@ See [WSL command wrappers](INTERFACES.md#wsl-command-wrappers).
   on WSL.
 - **REQ-WSL-002:** Make configured WSL commands available in PowerShell without
   shadowing native commands.
+- **REQ-WSL-003:** Install a `cmd.exe` shim on PATH on WSL so processes that
+  start without the Windows directories, such as the OpenCode Desktop server,
+  can launch Windows programs and the default browser.
 
 ## Installation
 
@@ -38,7 +41,8 @@ See the [installation reference](reference/Install.md).
 - **REQ-INSTALL-001:** Setup must be safe to rerun and inspect without changes.
   Uninstall must reverse managed changes without discarding local edits.
 - **REQ-INSTALL-002:** Setup must not install packages, elevate privileges, or
-  change secrets, SSH data, or CA state. Global Git changes are limited to the
+  change secrets, SSH data, or CA state. The WSL `cmd.exe` shim is the only
+  system file setup may write with sudo. Global Git changes are limited to the
   Linux installer's credential helper.
 - **REQ-INSTALL-003:** Configure both shells to load CustomShell. Make managed
   Linux environment values available in login shells.

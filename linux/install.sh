@@ -25,11 +25,13 @@ profile_marker_end="# <<< CustomShell profile <<<"
 
 mode="install"
 dry_run=false
+install_wsl_shim=true
 
 bashrc="${HOME:?HOME is not set}/.bashrc"
 profile_file="${HOME:?HOME is not set}/.profile"
 
 source "$project_dir/linux/Settings.sh"
+source "$project_dir/linux/core/wsl-interop.sh"
 source "$install_dir/common.sh"
 source "$install_dir/profile.sh"
 source "$install_dir/environment.sh"
@@ -50,6 +52,7 @@ Options:
   --dry-run            Print intended actions without changing anything.
   --uninstall          Remove the managed profile, links, Git helper, and
                        generated environment files.
+  --no-wsl-shim        Do not install the WSL /usr/local/bin/cmd.exe shim.
   --bashrc <path>      Override the rc file to edit (default: ~/.bashrc).
   --profile <path>     Override the POSIX login profile to edit (default:
                        ~/.profile).
@@ -67,6 +70,9 @@ while [[ $# -gt 0 ]]; do
 		;;
 	--uninstall)
 		mode="uninstall"
+		;;
+	--no-wsl-shim)
+		install_wsl_shim=false
 		;;
 	--bashrc)
 		shift
@@ -130,6 +136,10 @@ install)
 	write_profile_block || exit 1
 	write_posix_profile_block || exit 1
 	customshell_shims_link || exit 1
+	if [[ "$install_wsl_shim" == true ]]; then
+		customshell_wsl_cmd_shim_install ||
+			say "Warning: the cmd.exe shim was not installed; rerun install.sh to retry."
+	fi
 	customshell_git_install || exit 1
 	report_commands
 	if [[ "$dry_run" == true ]]; then
@@ -144,6 +154,8 @@ uninstall)
 	remove_profile_block || exit 1
 	customshell_environment_uninstall || exit 1
 	customshell_shims_unlink || exit 1
+	customshell_wsl_cmd_shim_uninstall ||
+		say "Warning: the cmd.exe shim was not removed; rerun install.sh --uninstall to retry."
 	if [[ "$dry_run" == true ]]; then
 		say "Dry run complete; no changes made."
 	else

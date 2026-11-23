@@ -11,6 +11,17 @@ test_root="$(mktemp -d)" || exit 1
 trap 'rm -rf -- "$test_root"' EXIT
 export XDG_STATE_HOME="$test_root/state"
 
+# The cmd.exe shim targets a system directory by default; keep every write and
+# the Windows discovery inside the test root so the suite never touches
+# /usr/local/bin or the real mount.
+export CUSTOMSHELL_IS_WSL=true
+export CUSTOMSHELL_SYSTEM_BIN_DIR="$test_root/sysbin"
+export CUSTOMSHELL_WINDOWS_MOUNT="$test_root/winmount"
+mkdir -p "$test_root/winmount/c/Windows/System32"
+printf '#!/bin/sh\nexit 0\n' >"$test_root/winmount/c/Windows/System32/cmd.exe"
+chmod +x "$test_root/winmount/c/Windows/System32/cmd.exe"
+cmd_shim="$test_root/sysbin/cmd.exe"
+
 install_script="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)/install.sh"
 repo_dir="$(cd -- "$(dirname -- "$install_script")/.." && pwd -P)"
 entry_script="$repo_dir/linux/main.sh"
@@ -113,6 +124,8 @@ grep -Fq '. "${HOME}/.config/customshell/env.sh"' "$profile_file" ||
 grep -Fq "export BASH_ENV='$repo_dir/linux/noninteractive.sh'" "$profile_file" ||
 	fail "POSIX login block does not export BASH_ENV"
 
+cmd_shim_md5="$(md5_of "$cmd_shim")"
+
 # Re-running is idempotent.
 before_md5="$(md5_of "$test_root/home/.bashrc")"
 before_profile_md5="$(md5_of "$profile_file")"
@@ -121,6 +134,8 @@ run_install >/dev/null 2>&1 || fail "second install failed"
 	fail "profile changed on a no-op rerun"
 [[ "$(md5_of "$profile_file")" == "$before_profile_md5" ]] ||
 	fail "POSIX login profile changed on a no-op rerun"
+[[ "$(md5_of "$cmd_shim")" == "$cmd_shim_md5" ]] ||
+	fail "cmd.exe shim changed on a no-op rerun"
 
 # A stale block is rewritten in place without duplication.
 if ! grep -Fq "/old/location/linux/main.sh" "$test_root/home/.bashrc"; then
@@ -226,10 +241,28 @@ if command -v fdfind >/dev/null 2>&1; then
 		fail "fd shim target is wrong"
 fi
 
+# The WSL cmd.exe shim exposes the Windows binary to processes started without
+# the Windows directories on PATH, such as the OpenCode Desktop server.
+[[ -x "$cmd_shim" ]] || fail "cmd.exe shim missing"
+head -n 1 "$cmd_shim" | grep -Fqx '#!/bin/sh' || fail "cmd.exe shim has no shell shebang"
+grep -Fqx '# Managed by CustomShell (linux/install.sh); removed by --uninstall.' "$cmd_shim" ||
+	fail "cmd.exe shim marker missing"
+# The target is whatever discovery prefers: a cmd.exe already on PATH, otherwise
+# the mounted Windows binary.
+expected_cmd_exe="$(command -v cmd.exe 2>/dev/null || true)"
+[[ -n "$expected_cmd_exe" ]] ||
+	expected_cmd_exe="$test_root/winmount/c/Windows/System32/cmd.exe"
+grep -Fq "exec \"$expected_cmd_exe\" \"\$@\"" "$cmd_shim" ||
+	fail "cmd.exe shim does not exec the discovered Windows binary"
+
 # Check mode succeeds when configured and changes nothing.
 check_md5="$(md5_of "$test_root/home/.bashrc")"
 check_profile_md5="$(md5_of "$profile_file")"
-run_install --check >/dev/null 2>&1 || fail "check failed on a configured setup"
+check_output="$(run_install --check 2>&1)" || fail "check failed on a configured setup"
+[[ "$check_output" == *"cmd.exe:    configured"* ]] ||
+	fail "check did not report the cmd.exe shim"
+[[ "$(md5_of "$cmd_shim")" == "$cmd_shim_md5" ]] ||
+	fail "check mode modified the cmd.exe shim"
 [[ "$(md5_of "$test_root/home/.bashrc")" == "$check_md5" ]] ||
 	fail "check mode modified the profile"
 [[ "$(md5_of "$profile_file")" == "$check_profile_md5" ]] ||
@@ -255,6 +288,7 @@ run_install --uninstall >/dev/null 2>&1 || fail "uninstall failed"
 if command -v fdfind >/dev/null 2>&1; then
 	[[ ! -e "$fd_shim" && ! -L "$fd_shim" ]] || fail "uninstall left the fd shim behind"
 fi
+[[ ! -e "$cmd_shim" ]] || fail "uninstall left the cmd.exe shim behind"
 [[ "$(GIT_CONFIG_GLOBAL="$test_root/home/.gitconfig" git config --global --get-all credential.helper)" == $'store\nmanager-core' ]] || fail "uninstall did not restore the previous Git credential helpers"
 [[ ! -e "$XDG_STATE_HOME/customshell/git-credential-helper" ]] ||
 	fail "uninstall left Git credential helper state behind"
@@ -321,13 +355,54 @@ printf '# dry\n' >"$dry_rc"
 printf '# dry profile\n' >"$dry_profile"
 dry_md5="$(md5_of "$dry_rc")"
 dry_profile_md5="$(md5_of "$dry_profile")"
-HOME="$test_root/home" XDG_BIN_HOME="$dry_bin" bash "$install_script" --dry-run \
+HOME="$test_root/home" XDG_BIN_HOME="$dry_bin" \
+	CUSTOMSHELL_SYSTEM_BIN_DIR="$test_root/drysys" \
+	bash "$install_script" --dry-run \
 	--bashrc "$dry_rc" --profile "$dry_profile" >/dev/null 2>&1 ||
 	fail "dry-run failed"
 [[ "$(md5_of "$dry_rc")" == "$dry_md5" ]] || fail "dry-run modified the profile"
 [[ "$(md5_of "$dry_profile")" == "$dry_profile_md5" ]] ||
 	fail "dry-run modified the POSIX login profile"
 [[ ! -e "$dry_bin/fd" ]] || fail "dry-run created the fd shim"
+[[ ! -e "$test_root/drysys/cmd.exe" ]] || fail "dry-run created the cmd.exe shim"
+
+# The shim is installed only on WSL, checked like other managed state, and never
+# claims a foreign file. These call the installer functions directly so the
+# assertions do not depend on the main suite's target directory.
+unit_bin="$test_root/unit-bin"
+mkdir -p "$unit_bin"
+run_shim_unit() {
+	local is_wsl=$1 action=$2
+	CUSTOMSHELL_IS_WSL="$is_wsl" CUSTOMSHELL_SYSTEM_BIN_DIR="$unit_bin" \
+		CUSTOMSHELL_WINDOWS_MOUNT="$test_root/winmount" \
+		bash -u -c '
+			say() { :; }
+			dry_run=false
+			source "$1"
+			source "$2"
+			source "$3"
+			customshell_shims_initialize
+			"$4"
+		' bash "$repo_dir/linux/core/wsl-interop.sh" "$repo_dir/linux/install/common.sh" \
+		"$repo_dir/linux/install/shims.sh" "$action"
+}
+run_shim_unit false customshell_wsl_cmd_shim_install ||
+	fail "shim install failed outside WSL"
+[[ ! -e "$unit_bin/cmd.exe" ]] || fail "shim was installed outside WSL"
+printf '#!/bin/sh\nexit 0\n' >"$unit_bin/cmd.exe"
+run_shim_unit true customshell_wsl_cmd_shim_uninstall ||
+	fail "shim uninstall failed on a foreign file"
+[[ -f "$unit_bin/cmd.exe" ]] || fail "uninstall removed a foreign cmd.exe"
+run_shim_unit true customshell_wsl_cmd_shim_check &&
+	fail "check passed for an unmanaged cmd.exe"
+rm -f "$unit_bin/cmd.exe"
+run_shim_unit true customshell_wsl_cmd_shim_check &&
+	fail "check passed without a cmd.exe shim"
+run_shim_unit true customshell_wsl_cmd_shim_install ||
+	fail "shim install failed on WSL"
+[[ -x "$unit_bin/cmd.exe" ]] || fail "shim was not installed on WSL"
+run_shim_unit true customshell_wsl_cmd_shim_check ||
+	fail "check rejected a configured cmd.exe shim"
 
 # Help exits successfully.
 bash "$install_script" --help >/dev/null 2>&1 || fail "help did not exit successfully"

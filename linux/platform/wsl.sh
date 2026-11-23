@@ -9,29 +9,19 @@ if command -v code >/dev/null 2>&1; then
     export EDITOR="${EDITOR:-code --wait}"
 fi
 
-# Locate Windows cmd.exe without relying on PATH. Distributions that set PATH
-# in /etc/environment replace the WSL PATH that includes the Windows
-# directories, so fall back to the mounted Windows system directory. Set
-# CUSTOMSHELL_WINDOWS_MOUNT when the drives are mounted outside /mnt.
-customshell_cmd_exe=""
-if command -v cmd.exe >/dev/null 2>&1; then
-    customshell_cmd_exe="$(command -v cmd.exe)"
-else
-    customshell_windows_mount="${CUSTOMSHELL_WINDOWS_MOUNT:-/mnt}"
-    for customshell_candidate in \
-        "$customshell_windows_mount"/*/Windows/System32/cmd.exe \
-        "$customshell_windows_mount"/*/Windows/system32/cmd.exe; do
-        if [[ -x "$customshell_candidate" ]]; then
-            customshell_cmd_exe="$customshell_candidate"
-            break
-        fi
-    done
-fi
+# Locate Windows cmd.exe without relying on PATH. Discovery is shared with the
+# installer, which embeds the same executable in /usr/local/bin/cmd.exe for
+# processes that start without the Windows directories on PATH.
+customshell_wsl_core="$({ cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../core" && pwd -P; })"
+# shellcheck source=../core/wsl-interop.sh
+source "$customshell_wsl_core/wsl-interop.sh"
+unset customshell_wsl_core
+
+customshell_cmd_exe="$(customshell_find_cmd_exe || true)"
 # A path with quotes or a newline cannot be embedded in the generated wrapper
 # or handed to the interpreter safely.
 customshell_cmd_usable=false
-if [[ -n "$customshell_cmd_exe" && "$customshell_cmd_exe" != *'"'* &&
-    "$customshell_cmd_exe" != *"'"* && "$customshell_cmd_exe" != *$'\n'* ]]; then
+if customshell_cmd_exe_usable "$customshell_cmd_exe"; then
     customshell_cmd_usable=true
 fi
 
@@ -73,7 +63,7 @@ if [[ -z ${BROWSER:-} && "$customshell_cmd_usable" == true ]]; then
     fi
     [[ -x "$customshell_wrapper" ]] && export BROWSER="$customshell_wrapper"
 fi
-unset customshell_cmd_exe customshell_candidate customshell_windows_mount
+unset customshell_cmd_exe
 unset customshell_cmd_usable customshell_windows_profile customshell_translated_profile
 unset customshell_wrapper customshell_wrapper_content
 

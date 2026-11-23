@@ -25,7 +25,10 @@ environment values, and platform details are in
 [Install.md](docs/reference/Install.md).
 
 In Windows PowerShell, run `opencode-wsl` to launch OpenCode in the default
-WSL distribution. Inside WSL, the command is still `opencode`.
+WSL distribution. Inside WSL, the command is still `opencode`. WSL setup also
+installs `/usr/local/bin/cmd.exe`, so processes started without the Windows
+PATH (for example the OpenCode Desktop server) can open Windows applications
+and the default browser.
 
 Scripts can use `TMPDIR`, `USER`, `HOME`, `PROJECTS_W`, and `PROJECTS_L` on both
 sides after setup. See
