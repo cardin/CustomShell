@@ -68,7 +68,7 @@
           "style": "powerline",
           "foreground": "parentForeground",
           "background": "parentBackground",
-          "template": " {{ .UserName }}  {{ .HostName }} "
+          "template": " {{ .UserName }}{{ if .SSHSession }}  {{ .HostName }}{{ end }} "
         },
         {
           "type": "path",
@@ -116,7 +116,6 @@
           "style": "diamond",
           "foreground": "parentForeground",
           "background": "p:lavender",
-          "powerline_symbol": "",
           "trailing_diamond": "",
           "template": "  {{ .CurrentDate | date .Format }} ",
           "options": {
@@ -151,7 +150,7 @@
           "foreground_templates": [
             "{{ if gt .Code 0 }}p:red{{ else }}p:green{{ end }}"
           ],
-          "template": "❯",
+          "template": "<b>❯</b>",
           "options": {
             "always_enabled": true
           }

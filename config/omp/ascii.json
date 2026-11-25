@@ -11,13 +11,13 @@
       "segments": [
         {
           "type": "session",
-          "style": "powerline",
+          "style": "plain",
           "foreground": "cyan",
-          "template": "{{ .UserName }} @ {{ .HostName }} "
+          "template": "{{ .UserName }}{{ if .SSHSession }} @ {{ .HostName }}{{ end }} "
         },
         {
           "type": "path",
-          "style": "powerline",
+          "style": "plain",
           "foreground": "white",
           "template": "in {{ .Path }}{{ if not .Writable }} [RO]{{ end }} ",
           "options": {
@@ -29,28 +29,39 @@
         },
         {
           "type": "git",
-          "style": "powerline",
+          "style": "plain",
           "foreground": "yellow",
           "template": "via git {{ .HEAD }}{{ if .BranchStatus }} {{ .BranchStatus }}{{ end }}{{ if .Working.Changed }} W:{{ .Working.String }}{{ end }}{{ if .Staging.Changed }} S:{{ .Staging.String }}{{ end }}{{ if gt .StashCount 0 }} stash:{{ .StashCount }}{{ end }} ",
           "options": {
-            "branch_icon": ""
+            "branch_icon": "",
+            "branch_identical_icon": "=",
+            "branch_ahead_icon": ">",
+            "branch_behind_icon": "<",
+            "branch_gone_icon": "!",
+            "commit_icon": "",
+            "tag_icon": "tag: ",
+            "rebase_icon": "rebase ",
+            "cherry_pick_icon": "cherry-pick ",
+            "revert_icon": "revert ",
+            "merge_icon": "merge ",
+            "no_commits_icon": "no commits"
           }
         },
         {
           "type": "python",
-          "style": "accordion",
+          "style": "plain",
           "foreground": "green",
           "template": "via py {{ .Major }}.{{ .Minor }}{{ if .Venv }} ({{ .Venv }}){{ end }} "
         },
         {
           "type": "node",
-          "style": "accordion",
+          "style": "plain",
           "foreground": "blue",
           "template": "via node {{ .Major }} "
         },
         {
           "type": "time",
-          "style": "powerline",
+          "style": "plain",
           "foreground": "magenta",
           "template": "at {{ .CurrentDate | date .Format }} ",
           "options": {
@@ -85,7 +96,7 @@
           "foreground_templates": [
             "{{ if gt .Code 0 }}red{{ else }}green{{ end }}"
           ],
-          "template": ">",
+          "template": "{{ if gt .Code 0 }}<b>x</b>{{ else }}<b>></b>{{ end }}",
           "options": {
             "always_enabled": true
           }
